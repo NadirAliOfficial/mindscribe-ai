@@ -48,3 +48,4 @@ Open the extension popup to set:
 
 MIT
 
+
