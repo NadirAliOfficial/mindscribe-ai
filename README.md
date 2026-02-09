@@ -16,3 +16,4 @@ AI-powered text improvement Chrome extension — rewrites and enhances selected 
 
 ## License
 MIT
+<!-- updated: 2026-02-09-02 -->
