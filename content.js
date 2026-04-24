@@ -7,20 +7,14 @@
   const MODEL = "llama-3.3-70b-versatile";
 
   const ACTIONS = [
-    { label: "Improve",      type: "improve",      icon: "✨" },
     { label: "Rewrite",      type: "rewrite",      icon: "🔄" },
     { label: "Proofread",    type: "proofread",    icon: "✅" },
-    { label: "Shorten",      type: "shorten",      icon: "✂️" },
     { label: "Professional", type: "professional", icon: "💼" },
-    { label: "Friendly",     type: "friendly",     icon: "😊" },
-    { label: "Translate",    type: "translate",    icon: "🌐" },
-    { label: "Custom",       type: "custom",       icon: "⚙️" },
+    { label: "Shorten",      type: "shorten",      icon: "✂️" },
   ];
 
-  // No few-shot examples — saves ~150 tokens per request; system prompts are clear enough
   const SHOTS = {
-    improve: [], rewrite: [], proofread: [], shorten: [],
-    professional: [], friendly: [], translate: [],
+    rewrite: [], proofread: [], professional: [], shorten: [],
   };
 
   // ── Live settings (synced in real-time via storage.onChanged) ───────────
@@ -46,12 +40,8 @@
   function applySettings(s) {
     if (!s) return;
     Object.assign(CFG, s);
-    // Trigger visibility
-    if (trigger) trigger.style.display = CFG.showTrigger ? "flex" : "none";
-    // SR button visibility
-    if (srBtn) srBtn.style.display = CFG.srEnabled && (focused || lastFocused) ? "flex" : "none";
-    // Rebuild menu if action list changed (only when menu is not open)
-    if (menu && menu.style.display !== "flex") rebuildMenu(menu);
+    if (srBtn)   srBtn.style.display   = CFG.srEnabled   && (focused || lastFocused) ? "flex" : "none";
+    if (toolbar) toolbar.style.display = CFG.showTrigger && (focused || lastFocused) ? "flex" : "none";
   }
 
   try {
@@ -74,27 +64,18 @@
 
   let customPrompt = CFG.customDefault;
 
-  // SHOTS for dynamic types (empty — no few-shot needed for translate/custom)
-  SHOTS.translate = SHOTS.translate || [];
-  SHOTS.custom    = [];
-
   const SYSTEM_MSG = {
-    improve:      "Improve the clarity, grammar, and flow of the text in <input> tags. Keep the same meaning, tone, length, and speaker perspective. Output ONLY the improved text. Do NOT include <input> tags or any explanation.",
     rewrite:      "Rephrase the text in <input> tags using different wording. Keep the same meaning, length, and speaker perspective. Output ONLY the rewritten text. Do NOT include <input> tags or any explanation.",
     proofread:    "Fix all grammar, spelling, and punctuation in the text in <input> tags. Do not change wording or style. Output ONLY the corrected text without <input> tags and without any explanation.",
     shorten:      "Shorten the text in <input> tags. Keep ALL points and information — only remove filler and redundancy. Keep the speaker's voice. Output ONLY the shortened text. Do NOT include <input> tags or any explanation.",
     professional: "Rewrite the text in <input> tags to sound formal and professional. Keep the same meaning, the same number of sentences, and the same length — do not add new sentences or new content. Output ONLY the rewritten text. Do NOT include <input> tags or any explanation.",
-    friendly:     "Rewrite the text in <input> tags to sound warm and conversational. Keep the same meaning, the same number of sentences, and the same length — do not add new sentences or new content. Output ONLY the rewritten text. Do NOT include <input> tags or any explanation.",
-    translate:    "Detect the language of the text in <input> tags. If it is not English, translate it to English. If it is already English, translate it to Spanish. Output ONLY the translation without <input> tags and without any explanation.",
-    custom:       "", // filled dynamically from customPrompt
   };
 
-  let trigger     = null; // small floating ✦ button
-  let srBtn       = null; // dedicated Smart Reply 💬 button (outside menu)
-  let menu        = null; // action menu panel
+  let toolbar     = null; // always-visible action bar below input
+  let srBtn       = null; // dedicated Smart Reply 💬 button
   let suggest     = null; // auto-suggestion bar
   let focused     = null; // currently focused editable element
-  let lastFocused = null; // persists after blur so menu clicks still have a target
+  let lastFocused = null; // persists after blur so toolbar clicks still have a target
 
   let suggestFor       = null;  // element the suggestion targets
   let suggestText      = "";    // suggested replacement text
@@ -103,7 +84,8 @@
   let streamPort       = null;  // active streaming port (disconnect to cancel)
   let undoStack        = [];    // multi-level undo: [{el, text}, ...] max 5
   let suggestDragged   = false; // true after user drags the bar — skip auto-reposition
-  let triggerDragged   = false; // true after user drags the trigger — skip auto-reposition
+  let toolbarDragged   = false; // true after user drags the toolbar — skip auto-reposition
+  let srStreaming      = false; // true while smart reply is streaming into input
   let originalForDiff  = "";    // text before suggestion — for diff view
   let siteUsage        = {};    // per-site action usage counts {hostname: {type: count}}
   let templates        = [];    // saved reply templates [{label, text}]
@@ -118,8 +100,8 @@
   function isEditable(el) {
     if (!el) return false;
     const id = el.id;
-    if (id === "te-trigger" || id === "te-menu" || id === "te-suggest") return false;
-    if (el.closest && el.closest("#te-suggest, #te-menu")) return false;
+    if (id === "te-toolbar" || id === "te-suggest") return false;
+    if (el.closest && el.closest("#te-suggest, #te-toolbar")) return false;
     // On LinkedIn, skip all contentEditable divs — the AI commenter handles those
     if (el.isContentEditable && window.location.hostname.includes("linkedin.com")) return false;
     if (el.isContentEditable) return true;
@@ -160,47 +142,83 @@
     }
   }
 
-  // ── Trigger button ────────────────────────────────────────────────────────
+  // Low-level write — no events fired, used for live streaming into the input
+  function setTextLive(el, text) {
+    if (!el) return;
+    if (el.isContentEditable) { el.innerText = text; }
+    else { el.value = text; }
+  }
 
-  function getTrigger() {
-    if (trigger) return trigger;
-    trigger = document.createElement("div");
-    trigger.id = "te-trigger";
-    trigger.title = "Text Enhancer";
-    trigger.textContent = "✦";
+  // ── Action toolbar ────────────────────────────────────────────────────────
 
+  function getToolbar() {
+    if (toolbar) return toolbar;
+    toolbar = document.createElement("div");
+    toolbar.id = "te-toolbar";
+
+    ACTIONS.forEach(({ label, type, icon }) => {
+      const btn = document.createElement("button");
+      btn.className = "te-action-btn";
+      btn.dataset.type = type;
+      const iconEl = document.createElement("span");
+      iconEl.className = "te-btn-icon";
+      iconEl.textContent = icon;
+      const labelEl = document.createElement("span");
+      labelEl.textContent = label;
+      btn.appendChild(iconEl);
+      btn.appendChild(labelEl);
+      btn.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        runAction(type);
+      });
+      toolbar.appendChild(btn);
+    });
+
+    // Drag to reposition
     let tDrag = null;
     let tMoved = false;
-    trigger.addEventListener("mousedown", (e) => {
+    toolbar.addEventListener("mousedown", (e) => {
+      if (e.target.closest(".te-action-btn")) return; // don't drag when clicking buttons
       e.preventDefault();
-      e.stopPropagation();
-      const r = trigger.getBoundingClientRect();
+      const r = toolbar.getBoundingClientRect();
       tDrag  = { ox: e.clientX - r.left, oy: e.clientY - r.top };
       tMoved = false;
-      trigger.style.cursor = "grabbing";
+      toolbar.style.cursor = "grabbing";
     });
     document.addEventListener("mousemove", (e) => {
       if (!tDrag) return;
-      const dx = e.clientX - (tDrag.ox + parseFloat(trigger.style.left || 0));
-      const dy = e.clientY - (tDrag.oy + parseFloat(trigger.style.top  || 0));
-      if (!tMoved && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
       tMoved = true;
-      triggerDragged = true;
-      const x = Math.max(4, Math.min(e.clientX - tDrag.ox, window.innerWidth  - 34));
-      const y = Math.max(4, Math.min(e.clientY - tDrag.oy, window.innerHeight - 34));
-      trigger.style.left = x + "px";
-      trigger.style.top  = y + "px";
+      toolbarDragged = true;
+      const x = Math.max(4, Math.min(e.clientX - tDrag.ox, window.innerWidth  - toolbar.offsetWidth  - 4));
+      const y = Math.max(4, Math.min(e.clientY - tDrag.oy, window.innerHeight - toolbar.offsetHeight - 4));
+      toolbar.style.left = x + "px";
+      toolbar.style.top  = y + "px";
     });
-    document.addEventListener("mouseup", (e) => {
+    document.addEventListener("mouseup", () => {
       if (!tDrag) return;
-      const wasMoved = tMoved;
       tDrag = null; tMoved = false;
-      trigger.style.cursor = "";
-      if (!wasMoved) toggleMenu();
+      toolbar.style.cursor = "";
+      if (toolbarDragged) {
+        try {
+          chrome.storage.local.set({ te_toolbar_pos: { left: toolbar.style.left, top: toolbar.style.top } });
+        } catch (_) {}
+      }
     });
 
-    document.documentElement.appendChild(trigger);
-    return trigger;
+    // Restore saved position
+    try {
+      chrome.storage.local.get("te_toolbar_pos", (r) => {
+        if (r.te_toolbar_pos?.left) {
+          toolbar.style.left = r.te_toolbar_pos.left;
+          toolbar.style.top  = r.te_toolbar_pos.top;
+          toolbarDragged     = true;
+        }
+      });
+    } catch (_) {}
+
+    document.documentElement.appendChild(toolbar);
+    return toolbar;
   }
 
   function getSrBtn() {
@@ -221,7 +239,6 @@
     srBtn.addEventListener("mousedown", (e) => { e.preventDefault(); e.stopPropagation(); });
     srBtn.addEventListener("click", (e) => {
       e.preventDefault(); e.stopPropagation();
-      hideMenu();
       runSmartReply(focused || lastFocused);
     });
     // Right-click / long-press context menu
@@ -341,25 +358,24 @@
     if (result) { setText(el, result); scheduleFollowUp(el); }
   }
 
-  function positionTrigger(el) {
-    const t = getTrigger();
+  function positionToolbar(el) {
+    const t = getToolbar();
     const s = getSrBtn();
-    t.style.display = "flex";
-    s.style.display = "flex";
-    if (triggerDragged) return;
+    if (CFG.showTrigger) t.style.display = "flex";
+    if (CFG.srEnabled)   s.style.display = "flex";
+    if (!toolbarDragged) {
+      const r = el.getBoundingClientRect();
+      t.style.top  = Math.min(r.bottom + 6, window.innerHeight - 46) + "px";
+      t.style.left = Math.max(8, r.left) + "px";
+    }
     const r = el.getBoundingClientRect();
-    const top  = Math.max(4, r.bottom - 34);
-    const left = Math.max(4, r.right  - 34);
-    t.style.top  = top  + "px";
-    t.style.left = left + "px";
-    s.style.top  = top  + "px";
-    s.style.left = Math.max(4, left - 38) + "px";
+    s.style.top  = Math.max(4, r.bottom - 34) + "px";
+    s.style.left = Math.max(4, r.right - 34)  + "px";
   }
 
-  function hideTrigger() {
-    if (trigger) trigger.style.display = "none";
+  function hideToolbar() {
+    if (toolbar) toolbar.style.display = "none";
     if (srBtn)   srBtn.style.display   = "none";
-    hideMenu();
   }
 
   // ── Suggestion bar ────────────────────────────────────────────────────────
@@ -440,7 +456,7 @@
     suggest.style.maxWidth = Math.min(520, window.innerWidth - Math.max(8, r.left) - 12) + "px";
   }
 
-  const ACTION_LABELS = { improve: "Improve", proofread: "Proofread", shorten: "Shorten", rewrite: "Rewrite", professional: "Professional", friendly: "Friendly" };
+  const ACTION_LABELS = { proofread: "Proofread", shorten: "Shorten", rewrite: "Rewrite", professional: "Professional" };
 
   function showSuggestLoading(el, action) {
     suggestFor    = el;
@@ -461,12 +477,15 @@
     s.style.display  = "flex";
   }
 
+  function escHtml(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
   function wordDiffHtml(original, updated) {
     const a = original.split(/\s+/);
     const b = updated.split(/\s+/);
     const setA = new Set(a);
-    const setB = new Set(b);
-    return b.map(w => setA.has(w) ? w : `<mark>${w}</mark>`).join(" ");
+    return b.map(w => setA.has(w) ? escHtml(w) : `<mark>${escHtml(w)}</mark>`).join(" ");
   }
 
   function showSuggestResult(text) {
@@ -483,8 +502,9 @@
 
   function hideSuggest() {
     streamPort?.disconnect();
-    streamPort     = null;
-    suggestDragged = false;
+    streamPort       = null;
+    suggestDragged   = false;
+    lastSuggestInput = ""; // reset so same text can re-trigger after dismiss
     if (suggest) {
       suggest.style.display = "none";
       const accept = suggest.querySelector("#te-suggest-accept");
@@ -536,118 +556,19 @@
       if (undoStack.length > 5) undoStack.shift();
       setText(el, replacement);
       el.focus();
-      hideMenu();
       trackUsage("auto");
       showUndoState(el, original);
     } else {
       hideSuggest();
-      hideMenu();
     }
   }
 
-  // ── Action menu ───────────────────────────────────────────────────────────
+  // ── Toolbar helpers ───────────────────────────────────────────────────────
 
-  function getMenu() {
-    if (menu) return menu;
-    menu = document.createElement("div");
-    menu.id = "te-menu";
-
-    ACTIONS.forEach(({ label, type, icon }, i) => {
-      // divider before Professional (index 4)
-      if (i === 4) {
-        const div = document.createElement("div");
-        div.className = "te-divider";
-        menu.appendChild(div);
-      }
-
-      const btn = document.createElement("button");
-      btn.className = "te-btn";
-      btn.dataset.type = type;
-      btn.dataset.label = label;
-
-      const iconEl = document.createElement("span");
-      iconEl.className = "te-btn-icon";
-      iconEl.textContent = icon;
-
-      const labelEl = document.createElement("span");
-      labelEl.textContent = label;
-
-      btn.appendChild(iconEl);
-      btn.appendChild(labelEl);
-
-      btn.addEventListener("mousedown", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        runAction(type);
-      });
-      menu.appendChild(btn);
-    });
-
-    document.documentElement.appendChild(menu);
-    return menu;
-  }
-
-  function toggleMenu() {
-    const m = getMenu();
-    if (m.style.display === "flex") {
-      hideMenu();
-    } else {
-      showMenu();
-    }
-  }
-
-  function reorderMenuByUsage() {
-    if (!menu) return;
-    const host    = window.location.hostname;
-    const usage   = siteUsage[host] || {};
-    const btns    = [...menu.querySelectorAll(".te-btn[data-type]")];
-    const divider = menu.querySelector(".te-divider");
-
-    const pinned  = ["translate", "custom"];
-    const sorted  = btns
-      .filter(b => !pinned.includes(b.dataset.type))
-      .sort((a, b) => (usage[b.dataset.type] || 0) - (usage[a.dataset.type] || 0));
-    const pinnedBtns = btns.filter(b => pinned.includes(b.dataset.type));
-
-    sorted.forEach(b => menu.appendChild(b));
-    if (divider) menu.appendChild(divider);
-    pinnedBtns.forEach(b => menu.appendChild(b));
-  }
-
-  function showMenu() {
-    const m = getMenu();
-    reorderMenuByUsage();
-    const t = getTrigger();
-    const tr = t.getBoundingClientRect();
-    m.style.display = "flex";
-
-    requestAnimationFrame(() => {
-      const mw = m.offsetWidth  || 300;
-      const mh = m.offsetHeight || 40;
-      let left = tr.left - mw + 28;
-      let top  = tr.top  - mh - 6;
-      left = Math.max(8, Math.min(left, window.innerWidth  - mw - 8));
-      if (top < 8) top = tr.bottom + 6;
-      m.style.left = left + "px";
-      m.style.top  = top  + "px";
-    });
-  }
-
-  function hideMenu() {
-    if (menu) {
-      menu.style.display  = "none";
-      menu.style.resize   = "";
-      menu.style.overflow = "";
-      menu.style.width    = "";
-      menu.style.height   = "";
-      resetBtns();
-    }
-  }
-
-  function resetBtns() {
-    if (!menu) return;
+  function resetToolbarBtns() {
+    if (!toolbar) return;
     ACTIONS.forEach(({ label, type, icon }) => {
-      const btn = menu.querySelector(`[data-type="${type}"]`);
+      const btn = toolbar.querySelector(`[data-type="${type}"]`);
       if (!btn) return;
       btn.disabled = false;
       btn.innerHTML = "";
@@ -660,6 +581,7 @@
       btn.appendChild(labelEl);
     });
   }
+
 
   // ── Dynamic options based on text size ───────────────────────────────────
 
@@ -736,8 +658,8 @@
       const ratios = { light: 0.80, medium: 0.60, aggressive: 0.40 };
       const ratio  = ratios[CFG.shortenStrength] || 0.60;
       num_predict  = Math.max(60, Math.ceil(w * ratio * 1.4));
-    } else if (type === "proofread" || type === "improve") {
-      num_predict = Math.max(80, Math.ceil(w * 1.2)); // output ≈ input length
+    } else if (type === "proofread") {
+      num_predict = Math.max(80, Math.ceil(w * 1.2));
     } else {
       num_predict = Math.max(80, Math.ceil(w * 1.5)); // rewrite/professional/friendly can be slightly longer
     }
@@ -823,9 +745,8 @@
 
   // Pick the best action based on what the text actually needs
   function pickAction(text) {
-    if (text.length > 220)    return "shorten";
-    if (typoScore(text) >= 2) return "proofread";
-    return "improve";
+    if (text.length > 220) return "shorten";
+    return "proofread"; // default: grammar + clarity check
   }
 
   // Returns true if suggestion is too similar to original to be worth showing
@@ -1049,32 +970,89 @@
     try { return new Date(`${m[1]} ${m[2]}, ${new Date().getFullYear()} ${m[3]}`); } catch (_) { return null; }
   }
 
-  function detectClientType(chatMsgs) {
-    const all = chatMsgs.map(m => m.content).join(" ").toLowerCase();
-    if (/\b(order|delivery|revision|phase|deployed|running|logs?|testing|live|milestone|submitted|bot|code)\b/.test(all)) {
-      if (/\b(issue|bug|error|not working|fix|broken|problem|help)\b/.test(all)) return "support";
-      return "active_order";
-    }
-    return "potential"; // still discussing / no order yet
+  // ── 1. Situation detection (client-side, no extra API call) ───────────────
+  function detectSituation(chatMsgs) {
+    const themMsgs  = chatMsgs.filter(m => m.role === "them");
+    const lastThem  = themMsgs[themMsgs.length - 1]?.content?.toLowerCase() || "";
+    const allThem   = themMsgs.map(m => m.content.toLowerCase()).join(" ");
+
+    if (/refund|scam|fake|report|fraud|unacceptable|terrible|awful|worst/.test(lastThem))                    return "complaint";
+    if (/revise|revision|change|modify|redo|not quite|not right|different|adjust/.test(lastThem))             return "revision";
+    if (/still waiting|still haven|haven't received|where is my|where.s my|delayed|running late|overdue/.test(lastThem)) return "delay_complaint";
+    if (/not working|error|bug|broken|crash|doesn't work|doesn.t work/.test(lastThem))                       return "support";
+    if (/price|cost|budget|discount|cheaper|how much|rate|fee|charge/.test(lastThem))                        return "pricing";
+    if (/\bwhen (will|can|do|is|are|should|could)\b|deadline|urgent|asap|how long|how many days|delivery date|timeline/.test(lastThem)) return "timeline";
+    if (/thank|great|perfect|amazing|love it|awesome|excellent|well done|good job/.test(lastThem)) return "praise";
+    if (/\bhold\b|get back to you|get back to me|let me think|i'll think|will think|need time|think about it/.test(lastThem)) return "hold";
+    if (themMsgs.length <= 2)                                                                       return "new_inquiry";
+    if (/order|delivery|milestone|phase|submitted|progress|update/.test(allThem))                  return "active_order";
+    return "general";
+  }
+
+  const SITUATION_GUIDE = {
+    complaint:       "IMPORTANT: The client is upset. Open with a genuine apology, acknowledge their specific concern, and offer a clear resolution. Be calm and empathetic — never defensive.",
+    revision:        "The client wants changes. Acknowledge their feedback positively, confirm you understand exactly what to change, and give a brief timeline.",
+    delay_complaint: "The client is frustrated about a delay. Apologize briefly, give a clear status update and specific ETA. Be direct and reassuring.",
+    support:         "The client has a technical issue. Confirm you understand the problem, explain what you will do to fix it or what info you need from them.",
+    pricing:         "The client is asking about pricing. Be confident about your rates and focus on value delivered. Do not volunteer discounts.",
+    timeline:        "The client is asking about delivery timeline. Give a specific realistic timeframe. Be confident and clear.",
+    praise:          "The client is happy. Thank them warmly and briefly. Reinforce the good relationship. Keep it genuine and short.",
+    new_inquiry:     "This is a new potential client. Be welcoming and answer their question directly. Show genuine interest in their project. Don't over-sell.",
+    active_order:    "This is an ongoing project. Be concise and informative. Update them on status if relevant.",
+    hold:            "The client is pausing or needs time to think. Acknowledge gracefully, confirm you'll wait for them, keep it brief. Don't push or add pressure.",
+    general:         "",
+  };
+
+  // ── 2. Intent extraction (client-side) ────────────────────────────────────
+  function extractIntent(chatMsgs) {
+    const lastThem = chatMsgs.filter(m => m.role === "them").pop()?.content || "";
+    const lo = lastThem.toLowerCase();
+    const intents = [];
+    if (/\?/.test(lastThem))                                           intents.push("asking a question");
+    if (/price|cost|budget|how much/.test(lo))                         intents.push("pricing inquiry");
+    if (/when|how long|deadline|timeline|deliver/.test(lo))            intents.push("timeline inquiry");
+    if (/send|share|show|provide|attach|give me/.test(lo))             intents.push("requesting files or info");
+    if (/example|sample|portfolio|past work|similar work/.test(lo))    intents.push("asking for examples");
+    if (/revise|change|update|fix|redo|adjust/.test(lo))               intents.push("revision request");
+    if (/can you|could you|please|would you/.test(lo))                 intents.push("making a request");
+    return intents.join(", ") || "general message";
+  }
+
+  // ── 3. Client tone mirroring ──────────────────────────────────────────────
+  function analyzeTone(chatMsgs) {
+    const themMsgs = chatMsgs.filter(m => m.role === "them").slice(-5);
+    if (!themMsgs.length) return "";
+    const allText  = themMsgs.map(m => m.content).join(" ");
+    const words    = allText.split(/\s+/).filter(Boolean);
+    const sents    = allText.split(/[.!?]+/).filter(s => s.trim().length > 2);
+    const avgLen   = sents.length ? words.length / sents.length : 10;
+    const informal = /\b(hey|hi|lol|btw|fyi|gonna|wanna|yeah|yep|ok|okay|thx|ur\b|u |r )\b/i.test(allText);
+    const formal   = /\b(dear|sincerely|regards|respectfully|pursuant|hereby|kindly)\b/i.test(allText);
+    const emojis   = /[\u{1F300}-\u{1FFFF}\u{2600}-\u{27FF}]/u.test(allText);
+    const notes    = [];
+    if (formal)         notes.push("formal and professional");
+    else if (informal)  notes.push("casual and informal");
+    if (avgLen < 7)     notes.push("brief short sentences");
+    if (emojis)         notes.push("uses emojis");
+    return notes.length ? `Mirror the client's style: they write in a ${notes.join(", ")} way.` : "";
   }
 
   function buildSmartReplyMessages(chatMsgs, draftText) {
-    const lastMsg     = chatMsgs[chatMsgs.length - 1];
     const lastThemMsg = [...chatMsgs].reverse().find(m => m.role === "them");
+    const situation   = detectSituation(chatMsgs);
+    const intent      = extractIntent(chatMsgs);
+    const toneNote    = CFG.replyTone === "auto" ? analyzeTone(chatMsgs) : "";
 
-    // Time since client's last message
     let timeNote = "";
     if (lastThemMsg?.timestamp) {
       const mins = (Date.now() - lastThemMsg.timestamp.getTime()) / 60000;
       if (mins >= 120) {
         const hrs = Math.round(mins / 60);
-        timeNote = `Note: The client's message was sent ~${hrs} hour${hrs > 1 ? "s" : ""} ago — briefly acknowledge the wait (e.g., "Thanks for your patience").`;
-      } else if (mins >= 45) {
-        timeNote = `Note: The client's message was sent ~${Math.round(mins)} minutes ago.`;
+        timeNote = `Client's message was sent ~${hrs}h ago — briefly acknowledge the wait.`;
       }
     }
 
-    const recentMsgs = chatMsgs.slice(-4);
+    const recentMsgs = chatMsgs.slice(-6);
     const fmtDate = (ts) => ts ? ts.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : null;
     const lines = recentMsgs.map(m => {
       const who  = m.role === "me" ? "You" : "Them";
@@ -1082,72 +1060,122 @@
       return date ? `[${date}] ${who}: ${m.content}` : `${who}: ${m.content}`;
     }).join("\n");
 
-    // Match reply length to last client message complexity
-    const lastClientMsg = chatMsgs[chatMsgs.length - 1]?.content || "";
-    const lengthGuide = lastClientMsg.length < 20
-      ? "Reply with 1 short sentence only."
-      : lastClientMsg.length < 80
-        ? "Keep the reply to 1–2 sentences."
-        : "Keep the reply to 2–3 sentences max.";
+    const lastClientMsg = lastThemMsg?.content || "";
+    const clientWords   = lastClientMsg.trim().split(/\s+/).filter(Boolean).length;
 
-    const now = new Date();
-    const todayStr = now.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-    const system = `[Context only — do NOT mention dates in your reply] Today is ${todayStr}. Messages are prefixed with [Mon DD] — use these to resolve relative date words (e.g. "tomorrow" in an Apr 14 message = Apr 15 = today). In this conversation, "You" are the sender and "Them" is the other person. Write the next message FROM "You" directly responding to "Them"'s last message. ${lengthGuide}${timeNote ? " " + timeNote : ""} Stay on topic. Do NOT repeat anything You already said. Do NOT include dates or greetings unless the conversation just started. Output ONLY the reply text.`;
+    let lengthGuide, maxTokens;
+    if (CFG.replyLength === "short") {
+      lengthGuide = "Reply in 1 short sentence only.";
+      maxTokens   = 50;
+    } else if (CFG.replyLength === "detailed") {
+      lengthGuide = "Reply in 3–4 sentences covering all points thoroughly.";
+      maxTokens   = 260;
+    } else {
+      // Proportional: target ~55% of client word count, clamped 6–160 words
+      const target = clientWords > 0 ? Math.max(6, Math.round(clientWords * 0.55)) : 12;
+      const lo     = Math.max(4,   Math.round(target * 0.8));
+      const hi     = Math.min(160, Math.round(target * 1.2));
+      maxTokens    = Math.max(40, Math.round(hi * 1.7));
+      if (clientWords <= 3) {
+        // Ultra-short ("Okay", "ok", "sure") — one sentence max
+        lengthGuide = `STRICT: Reply in 1 very short sentence, maximum 8 words. Client said only "${lastClientMsg.trim()}" — match that brevity.`;
+        maxTokens   = 40;
+      } else {
+        lengthGuide = `Reply in ${lo}–${hi} words. Client wrote ~${clientWords} words — your reply MUST be shorter than theirs.`;
+      }
+    }
+
+    let toneGuide = "";
+    if (CFG.replyTone === "professional") toneGuide = "Use a formal professional tone.";
+    else if (CFG.replyTone === "friendly") toneGuide = "Use a warm friendly tone.";
+    else if (CFG.replyTone === "casual")   toneGuide = "Use a casual relaxed tone.";
+
+    let portfolioNote = "";
+    try {
+      const matcher = typeof window !== "undefined" && window.TE_PORTFOLIO_MATCH;
+      if (matcher) {
+        const scanText = [lastClientMsg, ...chatMsgs.slice(-3).map(m => m.content)].join(" ");
+        const matches = matcher(scanText, 3);
+        if (matches?.length) {
+          const list = matches.map(m => `• ${m.desc} — ${m.url}`).join("\n");
+          portfolioNote = `\n\n[Portfolio — include 1-2 links ONLY if client is explicitly asking about similar past work. Otherwise ignore.]\n${list}`;
+        }
+      }
+    } catch (_) {}
+
+    const todayStr = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const system = [
+      `Today is ${todayStr} (context only — do NOT mention dates in reply).`,
+      `You are writing as "You" directly responding to "Them".`,
+      SITUATION_GUIDE[situation],
+      `Client's intent: ${intent}.`,
+      toneGuide || toneNote,
+      lengthGuide,
+      timeNote,
+      `Do NOT repeat what You already said. Do NOT add greetings unless this is the very first message. Output ONLY the reply text.`,
+      portfolioNote,
+    ].filter(Boolean).join(" ");
 
     const userContent = lines
-      ? `Conversation:\n${lines}${draftText ? `\n\nDraft started: ${draftText}` : ""}\n\nWrite You's reply:`
+      ? `Conversation:\n${lines}${draftText ? `\n\nDraft: ${draftText}` : ""}\n\nWrite You's reply:`
       : draftText
-        ? `Draft started: "${draftText}"\nComplete and improve this reply.`
-        : "Write a brief, friendly opening reply.";
+        ? `Draft: "${draftText}"\nImprove and complete this reply.`
+        : "Write a brief opening reply.";
 
-    return { system, userContent, lastMsg };
+    return { system, userContent, maxTokens };
   }
 
+  // ── 4. Smart Reply with live streaming into the input ────────────────────
   async function runSmartReply(el) {
     if (!el) return;
 
     const s = getSrBtn();
-    const origText = s.textContent;
-    s.textContent = "⏳";
+    const origIcon = s.textContent;
     s.style.pointerEvents = "none";
 
     const draftText = getText(el).trim();
     const chatMsgs  = extractChatHistory(el);
-    console.log("[TE] extractedChat", JSON.stringify(chatMsgs, null, 2));
 
-    // Only reply if client sent the last message
     if (chatMsgs.length > 0 && chatMsgs[chatMsgs.length - 1].role === "me") {
       s.textContent = "✓";
-      setTimeout(() => { s.textContent = origText; s.style.pointerEvents = ""; }, 1800);
+      setTimeout(() => { s.textContent = origIcon; s.style.pointerEvents = ""; }, 1500);
       return;
     }
 
-    const { system, userContent } = buildSmartReplyMessages(chatMsgs, draftText);
+    const { system, userContent, maxTokens } = buildSmartReplyMessages(chatMsgs, draftText);
 
-    // Use the streaming port — more reliable than sendMessage (avoids SW cold-start drops)
+    if (draftText) {
+      undoStack.push({ el, text: draftText });
+      if (undoStack.length > 5) undoStack.shift();
+    }
+
+    s.textContent = "✍";
+    srStreaming    = true;
+    let raw        = "";
+
     const result = await new Promise((resolve, reject) => {
       let port;
       try { port = runtimeConnect("te-stream"); }
       catch (e) { reject(new Error("Reload page and retry: " + e.message)); return; }
 
-      let raw = "";
       let settled = false;
       const done = (val) => { if (settled) return; settled = true; port.disconnect(); resolve(val); };
       const fail  = (err) => { if (settled) return; settled = true; port.disconnect(); reject(err);  };
-
       const timer = setTimeout(() => fail(new Error("Timed out — retry")), 60000);
 
       port.onMessage.addListener((msg) => {
-        console.log("[TE] SR msg:", JSON.stringify(msg).slice(0, 120));
         if (msg.error) { clearTimeout(timer); fail(new Error(parseError(msg.error))); return; }
-        if (msg.token) raw += msg.token;
-        if (msg.done)  { clearTimeout(timer); done(clean(raw)); }
+        if (msg.token) {
+          raw += msg.token;
+          const preview = cleanLeft(raw);
+          if (preview) setTextLive(el, preview); // stream tokens directly into the input
+        }
+        if (msg.done) { clearTimeout(timer); done(clean(raw)); }
       });
 
       port.onDisconnect.addListener(() => {
         const err = chrome.runtime.lastError?.message;
         clearTimeout(timer);
-        console.log("[TE] SR port disconnected, raw.length:", raw.length, "err:", err);
         if (!settled) fail(new Error(err ? parseError(err) : "Port closed — reload page and retry"));
       });
 
@@ -1156,61 +1184,61 @@
           { role: "system", content: system },
           { role: "user",   content: userContent },
         ],
-        options: { temperature: 0.65, num_predict: 150 },
+        options: { temperature: 0.6, num_predict: maxTokens },
       });
     }).catch(err => {
-      console.error("[TE] Smart Reply error:", err?.message);
+      srStreaming = false;
       s.textContent = "⚠";
       s.style.pointerEvents = "";
-      setTimeout(() => { s.textContent = origText; }, 2000);
+      if (raw) setTextLive(el, clean(raw)); // keep whatever streamed so far
+      else if (draftText) setTextLive(el, draftText); // restore draft on full failure
+      setTimeout(() => { s.textContent = origIcon; }, 2000);
       return null;
     });
 
+    srStreaming = false;
+
     if (result) {
-      if (draftText) {
-        undoStack.push({ el, text: draftText });
-        if (undoStack.length > 5) undoStack.shift();
-      }
       setText(el, result);
+      lastSuggestInput = result; // prevent auto-suggest from re-triggering on SR output
       trackUsage("smartreply");
       scheduleFollowUp(el);
-      s.textContent = origText;
-      s.style.pointerEvents = "";
     }
+
+    s.textContent = origIcon;
+    s.style.pointerEvents = "";
   }
 
   // ── Action ────────────────────────────────────────────────────────────────
 
   async function runAction(type) {
     const el = focused || lastFocused;
-
-    if (type === "custom") {
-      showCustomPromptInput(el);
-      return;
-    }
-
     const text = getText(el).trim();
-    if (!text) { hideMenu(); return; }
+    if (!text) return;
 
-    if (!menu) return;
-    const btn = menu.querySelector(`[data-type="${type}"]`);
+    const t = getToolbar();
+    const btn = t.querySelector(`[data-type="${type}"]`);
     if (!btn) return;
-    menu.querySelectorAll(".te-btn").forEach(b => (b.disabled = true));
-    btn.innerHTML = '<span class="te-btn-icon">⏳</span><span>Working...</span>';
+    t.querySelectorAll(".te-action-btn").forEach(b => (b.disabled = true));
+    btn.innerHTML = '<span class="te-btn-icon">⏳</span><span>Working…</span>';
 
     try {
       const result = await callOllama(text, type);
-      // Push to undo stack before replacing
       undoStack.push({ el, text });
       if (undoStack.length > 5) undoStack.shift();
       setText(el, result);
-      hideMenu();
+      resetToolbarBtns();
       trackUsage(type);
     } catch (err) {
-      resetBtns();
-      const errBtn = menu.querySelector(`[data-type="${type}"]`);
-      if (errBtn) errBtn.innerHTML = `<span class="te-btn-icon">⚠️</span><span>${err.message}</span>`;
-      setTimeout(resetBtns, 2500);
+      resetToolbarBtns();
+      const errBtn = t.querySelector(`[data-type="${type}"]`);
+      if (errBtn) {
+        errBtn.innerHTML = "";
+        const ic = document.createElement("span"); ic.className = "te-btn-icon"; ic.textContent = "⚠️";
+        const lb = document.createElement("span"); lb.textContent = err.message;
+        errBtn.appendChild(ic); errBtn.appendChild(lb);
+      }
+      setTimeout(resetToolbarBtns, 2500);
     }
   }
 
@@ -1221,154 +1249,6 @@
     try { chrome.storage.local.set({ te_site_usage: siteUsage }); } catch (_) {}
   }
 
-  function rebuildMenu(m) {
-    m.innerHTML = "";
-    m.style.minWidth = "";
-    ACTIONS.forEach(({ label, type, icon }, i) => {
-      if (i === 4) { const div = document.createElement("div"); div.className = "te-divider"; m.appendChild(div); }
-      const btn = document.createElement("button");
-      btn.className = "te-btn";
-      btn.dataset.type = type;
-      btn.dataset.label = label;
-      const iconEl = document.createElement("span"); iconEl.className = "te-btn-icon"; iconEl.textContent = icon;
-      const labelEl = document.createElement("span"); labelEl.textContent = label;
-      btn.appendChild(iconEl); btn.appendChild(labelEl);
-      btn.addEventListener("mousedown", (ev) => { ev.preventDefault(); ev.stopPropagation(); runAction(type); });
-      m.appendChild(btn);
-    });
-  }
-
-  function showCustomPromptInput(el) {
-    const m = getMenu();
-    m.innerHTML = "";
-    m.style.minWidth = "280px";
-    m.style.resize   = "both";
-    m.style.overflow = "auto";
-
-    const wrapper = document.createElement("div");
-    wrapper.style.cssText = "padding:10px;display:flex;flex-direction:column;gap:8px;height:100%;";
-
-    // Header row
-    const topRow = document.createElement("div");
-    topRow.style.cssText = "display:flex;align-items:center;gap:6px;";
-
-    const backBtn = document.createElement("button");
-    backBtn.className = "te-btn";
-    backBtn.style.cssText = "padding:4px 10px;font-size:12px;width:auto;";
-    backBtn.innerHTML = '<span class="te-btn-icon">←</span><span>Back</span>';
-    backBtn.addEventListener("mousedown", (e) => { e.preventDefault(); rebuildMenu(m); });
-
-    const headerLabel = document.createElement("div");
-    headerLabel.textContent = "Custom instruction";
-    headerLabel.style.cssText = "font-size:11px;color:#aaa;font-weight:500;flex:1;";
-
-    topRow.appendChild(backBtn);
-    topRow.appendChild(headerLabel);
-
-    // Instruction textarea
-    const textarea = document.createElement("textarea");
-    textarea.value = customPrompt;
-    textarea.placeholder = "Tell AI what to do, e.g:\n• Tell him I need 2 more days\n• Ask for his requirements\n• Apologize for the delay";
-    textarea.rows = 4;
-    textarea.style.cssText = "background:#2d2d2d;color:#fff;border:1px solid #555;border-radius:6px;padding:8px;font-size:12px;outline:none;resize:vertical;width:100%;box-sizing:border-box;font-family:inherit;line-height:1.5;min-height:72px;";
-    textarea.addEventListener("keydown", (e) => e.stopPropagation());
-
-    // Chat context toggle
-    const chatMsgs = extractChatHistory(el);
-    const hasChatCtx = chatMsgs.length > 0;
-
-    const ctxRow = document.createElement("div");
-    ctxRow.style.cssText = "display:flex;align-items:center;gap:6px;";
-    const ctxCheck = document.createElement("input");
-    ctxCheck.type = "checkbox";
-    ctxCheck.id = "te-ctx-toggle";
-    ctxCheck.checked = hasChatCtx;
-    ctxCheck.disabled = !hasChatCtx;
-    ctxCheck.style.cssText = "accent-color:#0a66c2;cursor:pointer;";
-    const ctxLabel = document.createElement("label");
-    ctxLabel.htmlFor = "te-ctx-toggle";
-    ctxLabel.textContent = hasChatCtx ? `Include chat (${chatMsgs.length} msgs)` : "No chat detected";
-    ctxLabel.style.cssText = `font-size:11px;color:${hasChatCtx ? "#aaa" : "#555"};cursor:pointer;`;
-    ctxRow.appendChild(ctxCheck);
-    ctxRow.appendChild(ctxLabel);
-
-    const runBtn = document.createElement("button");
-    runBtn.className = "te-btn";
-    runBtn.innerHTML = '<span class="te-btn-icon">▶</span><span>Run</span>';
-    runBtn.style.cssText = "justify-content:center;background:#0a66c2;color:#fff;border-radius:8px;";
-    runBtn.addEventListener("mousedown", async (e) => {
-      e.preventDefault();
-      const instruction = textarea.value.trim();
-      if (!instruction) return;
-      customPrompt = instruction;
-      try { chrome.storage.local.set({ te_custom_prompt: customPrompt }); } catch (_) {}
-
-      runBtn.innerHTML = '<span class="te-btn-icon">⏳</span><span>Working...</span>';
-      runBtn.disabled = true;
-
-      const inputText = getText(el).trim();
-      const useChatCtx = ctxCheck.checked && hasChatCtx;
-
-      // Build system + user content with optional chat context
-      let system, userContent;
-      if (useChatCtx) {
-        const chatLines = chatMsgs.slice(-12).map(m =>
-          `${m.role === "me" ? "You" : "Them"}: ${m.content}`
-        ).join("\n");
-        system = `You are writing a message on behalf of the person labeled "You" in this conversation. Follow the instruction exactly. Keep the reply concise (2–3 sentences max). Output ONLY the message text — no labels, no explanation.`;
-        userContent = `Conversation:\n${chatLines}\n\nInstruction: ${instruction}${inputText ? `\n\nDraft: ${inputText}` : ""}\n\nWrite the reply:`;
-      } else {
-        system = `Follow this instruction: ${instruction}\nText is in <input> tags. Output ONLY the result — no explanation.`;
-        userContent = `<input>${inputText || "..."}</input>`;
-      }
-
-      try {
-        const result = await new Promise((resolve, reject) => {
-          let port;
-          try { port = runtimeConnect("te-stream"); }
-          catch (e) { reject(new Error("Reload page and retry")); return; }
-          let raw = ""; let settled = false;
-          const done = v => { if (!settled) { settled = true; port.disconnect(); resolve(v); } };
-          const fail = e => { if (!settled) { settled = true; port.disconnect(); reject(e); } };
-          const timer = setTimeout(() => fail(new Error("Timed out")), 60000);
-          port.onMessage.addListener(msg => {
-            if (msg.error) { clearTimeout(timer); fail(new Error(parseError(msg.error))); return; }
-            if (msg.token) raw += msg.token;
-            if (msg.done)  { clearTimeout(timer); done(clean(raw)); }
-          });
-          port.onDisconnect.addListener(() => { clearTimeout(timer); if (!settled) fail(new Error("Reload page and retry")); });
-          port.postMessage({
-            messages: [
-              { role: "system", content: system },
-              { role: "user",   content: userContent },
-            ],
-            options: { temperature: 0.65, num_predict: 200 },
-          });
-        });
-        if (inputText) { undoStack.push({ el, text: inputText }); if (undoStack.length > 5) undoStack.shift(); }
-        setText(el, result);
-        hideMenu();
-        trackUsage("custom");
-      } catch (err) {
-        runBtn.innerHTML = `<span class="te-btn-icon">⚠️</span><span>${err.message}</span>`;
-        setTimeout(() => {
-          runBtn.innerHTML = '<span class="te-btn-icon">▶</span><span>Run</span>';
-          runBtn.disabled = false;
-        }, 2500);
-        return;
-      }
-      runBtn.innerHTML = '<span class="te-btn-icon">▶</span><span>Run</span>';
-      runBtn.disabled = false;
-    });
-
-    wrapper.appendChild(topRow);
-    wrapper.appendChild(textarea);
-    wrapper.appendChild(ctxRow);
-    wrapper.appendChild(runBtn);
-    m.appendChild(wrapper);
-    setTimeout(() => textarea.focus(), 50);
-  }
-
   // ── Typing detection & auto-suggest ──────────────────────────────────────
 
   let typingTimer  = null;
@@ -1376,14 +1256,14 @@
 
   function handleTyping(el) {
     if (!isEditable(el)) return;
+    if (srStreaming) return; // don't interfere while smart reply is streaming
     focused = el; lastFocused = el;
 
     clearTimeout(typingTimer);
     clearTimeout(suggestTimer);
-    hideMenu();
     hideSuggest();
 
-    positionTrigger(el);
+    positionToolbar(el);
 
     const text = getText(el).trim();
 
@@ -1456,7 +1336,7 @@
   document.addEventListener("focusin", (e) => {
     if (!isEditable(e.target)) return;
     focused = e.target; lastFocused = e.target;
-    positionTrigger(e.target);
+    positionToolbar(e.target);
     watchFocusedEl(e.target);
   });
 
@@ -1465,14 +1345,11 @@
     setTimeout(() => {
       const active = document.activeElement;
       if (
-        (trigger  && trigger.contains(active))  ||
-        (menu     && menu.contains(active))     ||
+        (toolbar  && toolbar.contains(active))  ||
         (suggest  && suggest.contains(active))  ||
         isEditable(active)
       ) return;
-      // Don't hide anything if the menu is currently open
-      if (menu && menu.style.display === "flex") return;
-      hideTrigger();
+      hideToolbar();
       hideSuggest();
       clearTimeout(suggestTimer);
       focused = null;
@@ -1480,37 +1357,28 @@
   });
 
   window.addEventListener("scroll", () => {
-    if (focused) { positionTrigger(focused); positionSuggest(focused); }
+    if (focused) { positionToolbar(focused); positionSuggest(focused); }
   }, { passive: true });
 
   window.addEventListener("resize", () => {
-    if (focused) { positionTrigger(focused); positionSuggest(focused); }
+    if (focused) { positionToolbar(focused); positionSuggest(focused); }
   }, { passive: true });
 
   document.addEventListener("mousedown", (e) => {
-    if (trigger && trigger.contains(e.target)) return;
-    if (menu    && menu.contains(e.target))    return;
+    if (toolbar && toolbar.contains(e.target)) return;
     if (suggest && suggest.contains(e.target)) return;
-    hideMenu();
   });
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
-      hideMenu();
+      resetToolbarBtns();
       hideSuggest();
       clearTimeout(typingTimer);
       clearTimeout(suggestTimer);
     }
-    // Tab to accept suggestion
     if (e.key === "Tab" && suggest && suggest.style.display !== "none" && suggestText) {
       e.preventDefault();
       applySuggestion();
-    }
-    // Ctrl+. to toggle action menu on any focused input
-    if (e.key === "." && (e.ctrlKey || e.metaKey) && focused) {
-      e.preventDefault();
-      if (menu && menu.style.display === "flex") hideMenu();
-      else showMenu();
     }
   });
 
@@ -1632,12 +1500,20 @@
         background:#1e1e1e;color:#e0e0e0;border:1px solid #444;border-radius:10px;
         padding:16px 20px;max-width:400px;width:90%;z-index:2147483647;font-size:13px;
         line-height:1.6;box-shadow:0 8px 32px rgba(0,0,0,0.6);white-space:pre-wrap;font-family:inherit;`;
-      overlay.innerHTML = `<div style="font-weight:600;margin-bottom:8px;color:#7ab3e0">📋 Conversation Summary</div>${result}
-        <div style="text-align:right;margin-top:12px">
-          <button id="te-summary-close" style="background:#333;border:1px solid #555;color:#ccc;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px">Close</button>
-        </div>`;
+      const title = document.createElement("div");
+      title.style.cssText = "font-weight:600;margin-bottom:8px;color:#7ab3e0";
+      title.textContent = "📋 Conversation Summary";
+      const body = document.createElement("div");
+      body.textContent = result;
+      const footer = document.createElement("div");
+      footer.style.cssText = "text-align:right;margin-top:12px";
+      const closeBtn = document.createElement("button");
+      closeBtn.style.cssText = "background:#333;border:1px solid #555;color:#ccc;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px";
+      closeBtn.textContent = "Close";
+      footer.appendChild(closeBtn);
+      overlay.appendChild(title); overlay.appendChild(body); overlay.appendChild(footer);
       document.documentElement.appendChild(overlay);
-      overlay.querySelector("#te-summary-close").addEventListener("mousedown", () => overlay.remove());
+      closeBtn.addEventListener("mousedown", () => overlay.remove());
       setTimeout(() => overlay.remove(), 15000);
     }
   }
