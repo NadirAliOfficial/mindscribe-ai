@@ -1,18 +1,13 @@
-importScripts("config.js");
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 const controllers = new Map();
 
-function groqHeaders() {
-  return { "Content-Type": "application/json", "Authorization": "Bearer " + getGroqKey() };
-}
-
-// On 429, rotate to next key. Returns error string only after all keys exhausted.
-function handle429(r, attempt, totalKeys) {
-  rotateGroqKey();
-  if (attempt < totalKeys) return null; // null = retry with next key
-  const wait = r.headers.get("retry-after") || r.headers.get("x-ratelimit-reset-requests") || "60";
-  return "rate_limited:" + Math.ceil(Number(wait) || 60);
+function getKey() {
+  return new Promise(resolve => {
+    chrome.storage.local.get({ te_settings: {} }, ({ te_settings }) => {
+      resolve((te_settings.apiKey || "").trim() || null);
+    });
+  });
 }
 
 // ── Non-streaming (manual actions) ───────────────────────────────────────────
@@ -21,7 +16,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   const tabId = sender.tab?.id ?? 0;
   controllers.get(tabId)?.abort();
-
   const ctrl = new AbortController();
   controllers.set(tabId, ctrl);
 
@@ -34,34 +28,38 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     stream: false,
   };
 
-  async function tryFetch(attempt) {
-    const r = await fetch(GROQ_URL, {
+  getKey().then(key => {
+    if (!key) {
+      controllers.delete(tabId);
+      sendResponse({ ok: false, error: "No API key — open the extension popup → API tab and save your Groq key." });
+      return;
+    }
+    fetch(GROQ_URL, {
       method: "POST",
-      headers: groqHeaders(),
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
       body: JSON.stringify(body),
       signal: ctrl.signal,
-    });
-    if (!r.ok) {
-      if (r.status === 429) {
-        const errMsg = handle429(r, attempt, GROQ_API_KEYS.length);
-        if (!errMsg) return tryFetch(attempt + 1);
-        throw new Error(errMsg);
-      }
-      throw new Error("Groq " + r.status);
-    }
-    return r.json();
-  }
-
-  tryFetch(1)
-    .then(data => {
-      controllers.delete(tabId);
-      sendResponse({ ok: true, text: data.choices?.[0]?.message?.content || "" });
     })
-    .catch(err => {
-      controllers.delete(tabId);
-      if (err.name === "AbortError") return;
-      sendResponse({ ok: false, error: err.message });
-    });
+      .then(async r => {
+        if (!r.ok) {
+          if (r.status === 429) {
+            const wait = r.headers.get("retry-after") || r.headers.get("x-ratelimit-reset-requests") || "60";
+            throw new Error("rate_limited:" + Math.ceil(Number(wait) || 60));
+          }
+          throw new Error("Groq " + r.status);
+        }
+        return r.json();
+      })
+      .then(data => {
+        controllers.delete(tabId);
+        sendResponse({ ok: true, text: data.choices?.[0]?.message?.content || "" });
+      })
+      .catch(err => {
+        controllers.delete(tabId);
+        if (err.name === "AbortError") return;
+        sendResponse({ ok: false, error: err.message });
+      });
+  });
 
   return true;
 });
@@ -76,6 +74,12 @@ chrome.runtime.onConnect.addListener((port) => {
     ctrl?.abort();
     ctrl = new AbortController();
 
+    const key = await getKey();
+    if (!key) {
+      port.postMessage({ error: "No API key — open the extension popup → API tab and save your Groq key." });
+      return;
+    }
+
     const { messages, options = {} } = payload;
     const body = {
       model: payload.model || "llama-3.3-70b-versatile",
@@ -85,19 +89,18 @@ chrome.runtime.onConnect.addListener((port) => {
       stream: true,
     };
 
-    async function tryStream(attempt) {
+    try {
       const resp = await fetch(GROQ_URL, {
         method: "POST",
-        headers: groqHeaders(),
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
         body: JSON.stringify(body),
         signal: ctrl.signal,
       });
 
       if (!resp.ok) {
         if (resp.status === 429) {
-          const errMsg = handle429(resp, attempt, GROQ_API_KEYS.length);
-          if (!errMsg) return tryStream(attempt + 1);
-          port.postMessage({ error: errMsg });
+          const wait = resp.headers.get("retry-after") || resp.headers.get("x-ratelimit-reset-requests") || "60";
+          port.postMessage({ error: "rate_limited:" + Math.ceil(Number(wait) || 60) });
           return;
         }
         port.postMessage({ error: "Groq " + resp.status });
@@ -127,10 +130,6 @@ chrome.runtime.onConnect.addListener((port) => {
           } catch (_) {}
         }
       }
-    }
-
-    try {
-      await tryStream(1);
     } catch (e) {
       if (e.name !== "AbortError") port.postMessage({ error: e.message });
     }

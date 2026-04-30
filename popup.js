@@ -235,4 +235,14 @@ function renderAll() {
 
   // Action toggles
   buildActionToggles();
+
+  // Warn if no key
+  const badge = document.getElementById("statusBadge");
+  const label = document.getElementById("statusText");
+  const dot   = badge?.querySelector(".status-dot");
+  if (!settings.apiKey) {
+    if (label) label.textContent = "No API key";
+    if (dot)   dot.style.background = "#f87171";
+    if (badge) badge.style.background = "#3a1a1a", badge.style.borderColor = "#6e2a2a", badge.style.color = "#f87171";
+  }
 }
