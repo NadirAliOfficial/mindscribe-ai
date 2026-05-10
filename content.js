@@ -1381,10 +1381,25 @@
   // keyup is a fallback for Brave which sometimes doesn't fire 'input' on contenteditable
   document.addEventListener("input",          onInput);
   document.addEventListener("keyup",          (e) => {
-    if (e.key && e.key.length === 1 || e.key === "Backspace" || e.key === "Delete") onInput(e);
+    // Brave: catch all keys that could change text content
+    const ignore = ["Shift","Control","Alt","Meta","CapsLock","Tab","Escape",
+                    "ArrowLeft","ArrowRight","ArrowUp","ArrowDown",
+                    "Home","End","PageUp","PageDown","F1","F2","F3","F4",
+                    "F5","F6","F7","F8","F9","F10","F11","F12"];
+    if (!ignore.includes(e.key)) onInput(e);
   });
   document.addEventListener("paste",          (e) => setTimeout(() => onInput(e), 50));
   document.addEventListener("compositionend", onInput);
+
+  // Brave fallback: click also triggers toolbar in case focusin is suppressed
+  document.addEventListener("click", (e) => {
+    const el = e.target;
+    if (!isEditable(el)) return;
+    if (focused === el) return; // already handled by focusin
+    focused = el; lastFocused = el;
+    positionToolbar(el);
+    watchFocusedEl(el);
+  });
 
   // MutationObserver fallback: watch focused element's text content for changes
   // Catches Brave cases where neither input nor keyup fires
