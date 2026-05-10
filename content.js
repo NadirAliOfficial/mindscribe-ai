@@ -11,10 +11,11 @@
     { label: "Proofread",    type: "proofread",    icon: "✅" },
     { label: "Professional", type: "professional", icon: "💼" },
     { label: "Shorten",      type: "shorten",      icon: "✂️" },
+    { label: "Clean",        type: "clean",        icon: "🧹" },
   ];
 
   const SHOTS = {
-    rewrite: [], proofread: [], professional: [], shorten: [],
+    rewrite: [], proofread: [], professional: [], shorten: [], clean: [],
   };
 
   // ── Live settings (synced in real-time via storage.onChanged) ───────────
@@ -45,11 +46,12 @@
   }
 
   try {
-    chrome.storage.local.get(["te_settings", "te_custom_prompt", "te_templates", "te_site_usage"], r => {
-      if (r.te_settings)    applySettings(r.te_settings);
-      if (r.te_custom_prompt) CFG.customDefault = r.te_custom_prompt;
-      if (r.te_site_usage)  siteUsage = r.te_site_usage;
-      if (r.te_templates)   templates = r.te_templates;
+    chrome.storage.local.get(["te_settings", "te_custom_prompt", "te_templates", "te_site_usage", "te_disabled_sites"], r => {
+      if (r.te_settings)       applySettings(r.te_settings);
+      if (r.te_custom_prompt)  CFG.customDefault = r.te_custom_prompt;
+      if (r.te_site_usage)     siteUsage = r.te_site_usage;
+      if (r.te_templates)      templates = r.te_templates;
+      if (r.te_disabled_sites) siteDisabled = r.te_disabled_sites.includes(window.location.hostname);
     });
   } catch (_) {}
 
@@ -69,6 +71,7 @@
     proofread:    "Fix all grammar, spelling, and punctuation in the text in <input> tags. Do not change wording or style. Output ONLY the corrected text without <input> tags and without any explanation.",
     shorten:      "Shorten the text in <input> tags. Keep ALL points and information — only remove filler and redundancy. Keep the speaker's voice. Output ONLY the shortened text. Do NOT include <input> tags or any explanation.",
     professional: "Rewrite the text in <input> tags to sound formal and professional. Keep the same meaning, the same number of sentences, and the same length — do not add new sentences or new content. Output ONLY the rewritten text. Do NOT include <input> tags or any explanation.",
+    clean:        "Clean up the text in <input> tags that was copied from a terminal or chat. Remove extra whitespace, alignment padding, and separator lines (lines made only of dashes, equals signs, or underscores). Keep ALL message content word-for-word — do not rephrase, summarize, or alter any wording. Output ONLY the cleaned text.",
   };
 
   let toolbar     = null; // always-visible action bar below input
@@ -90,6 +93,7 @@
   let siteUsage        = {};    // per-site action usage counts {hostname: {type: count}}
   let templates        = [];    // saved reply templates [{label, text}]
   let awayMode         = false; // auto-generate holding reply when new message arrives
+  let siteDisabled     = false; // auto-suggest disabled for this hostname
   let responseTimerInt = null;  // setInterval for the waiting-time badge on SR button
   let followUpTimer    = null;  // setTimeout for follow-up reminder
 
@@ -109,7 +113,28 @@
     if (tag === "TEXTAREA") return true;
     if (tag === "INPUT") {
       const t = (el.type || "text").toLowerCase();
-      return ["text","search","email","url","tel",""].includes(t); // no password
+      // Only meaningful text-entry types (no search, number, date, range, color, file…)
+      if (!["text", "email", "url", "tel", ""].includes(t)) return false;
+
+      const nm     = (el.name          || "").toLowerCase();
+      const eid    = (el.id            || "").toLowerCase();
+      const ph     = (el.placeholder   || "").toLowerCase();
+      const ac     = (el.autocomplete  || "").toLowerCase();
+      const maxLen = parseInt(el.maxLength);
+
+      // Skip search inputs
+      if (/\bsearch\b|\bquery\b|\bfind\b/.test(ph))         return false;
+      if (/^(q|s|search|query|find|keyword)$/.test(nm))     return false;
+      if (/^(q|s|search|query|find|keyword)$/.test(eid))    return false;
+
+      // Skip OTP / PIN / verification code inputs
+      if (ac === "one-time-code")                            return false;
+      if (/\botp\b|\bpin\b|\bverif/.test(`${nm} ${eid}`))   return false;
+      if (maxLen === 1)                                      return false; // single-digit OTP box
+      if (maxLen > 0 && maxLen <= 6 &&
+          (t === "tel" || el.getAttribute("inputmode") === "numeric")) return false;
+
+      return true;
     }
     return false;
   }
@@ -174,6 +199,40 @@
       });
       toolbar.appendChild(btn);
     });
+
+    // Per-site auto-suggest toggle
+    const sep = document.createElement("div");
+    sep.style.cssText = "width:1px;height:18px;background:#3a3a3a;margin:0 2px;flex-shrink:0;";
+    toolbar.appendChild(sep);
+
+    const siteToggle = document.createElement("button");
+    siteToggle.id = "te-site-toggle";
+    siteToggle.className = "te-action-btn";
+    siteToggle.style.padding = "5px 8px";
+    function updateSiteToggle() {
+      siteToggle.innerHTML = siteDisabled
+        ? '<span class="te-btn-icon" style="opacity:0.5">⊘</span>'
+        : '<span class="te-btn-icon">✨</span>';
+      siteToggle.title = siteDisabled
+        ? "Auto-suggest off for this site — click to enable"
+        : "Auto-suggest on — click to disable for this site";
+      siteToggle.style.opacity = siteDisabled ? "0.5" : "1";
+    }
+    updateSiteToggle();
+    siteToggle.addEventListener("mousedown", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      siteDisabled = !siteDisabled;
+      updateSiteToggle();
+      try {
+        chrome.storage.local.get("te_disabled_sites", (r) => {
+          let sites = r.te_disabled_sites || [];
+          if (siteDisabled) { if (!sites.includes(window.location.hostname)) sites.push(window.location.hostname); }
+          else              { sites = sites.filter(s => s !== window.location.hostname); }
+          chrome.storage.local.set({ te_disabled_sites: sites });
+        });
+      } catch (_) {}
+    });
+    toolbar.appendChild(siteToggle);
 
     // Drag to reposition
     let tDrag = null;
@@ -456,7 +515,7 @@
     suggest.style.maxWidth = Math.min(520, window.innerWidth - Math.max(8, r.left) - 12) + "px";
   }
 
-  const ACTION_LABELS = { proofread: "Proofread", shorten: "Shorten", rewrite: "Rewrite", professional: "Professional" };
+  const ACTION_LABELS = { proofread: "Proofread", shorten: "Shorten", rewrite: "Rewrite", professional: "Professional", clean: "Clean" };
 
   function showSuggestLoading(el, action) {
     suggestFor    = el;
@@ -734,19 +793,19 @@
     return score;
   }
 
-  // Returns true if text is a URL, email, or code — skip auto-suggest
+  // Returns true if text is a URL, email, code, or OTP — skip auto-suggest
   function shouldSkip(text) {
     const t = text.trim();
-    if (/^https?:\/\/\S+$/.test(t))          return true; // URL
-    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)) return true; // email
+    if (/^https?:\/\/\S+$/.test(t))                                                   return true; // URL
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t))                                         return true; // email
     if (/[{}\[\]<>]|function\s*\(|=>\s*{|import\s+|const\s+|var\s+|def\s+/.test(t)) return true; // code
+    if (/^\d{4,8}$/.test(t))                                                           return true; // OTP / PIN (pure digits)
     return false;
   }
 
-  // Pick the best action based on what the text actually needs
+  // Auto-suggest always proofreads — never auto-shortens
   function pickAction(text) {
-    if (text.length > 220) return "shorten";
-    return "proofread"; // default: grammar + clarity check
+    return "proofread";
   }
 
   // Returns true if suggestion is too similar to original to be worth showing
@@ -1261,14 +1320,18 @@
 
     clearTimeout(typingTimer);
     clearTimeout(suggestTimer);
-    hideSuggest();
-
-    positionToolbar(el);
 
     const text = getText(el).trim();
 
-    // Auto-suggest: stream after configurable pause, text ≥ minLength chars
-    if (CFG.autoSuggest && text.length >= CFG.minLength && text !== lastSuggestInput && !shouldSkip(text)) {
+    // Only dismiss suggestion if text changed — prevents MutationObserver spurious
+    // fires (page JS touching the contenteditable) from hiding an active suggestion
+    const suggestVisible = suggest && suggest.style.display !== "none";
+    if (!suggestVisible || text !== originalForDiff) hideSuggest();
+
+    positionToolbar(el);
+
+    // Auto-suggest: only when site is enabled, text is long enough, and there's a detectable error
+    if (CFG.autoSuggest && !siteDisabled && text.length >= CFG.minLength && text !== lastSuggestInput && !shouldSkip(text) && typoScore(text) > 0) {
       suggestTimer = setTimeout(() => {
         if (focused !== el) return;
         if (isRateLimited()) { showSuggestLoading(el, "suggest"); showSuggestResult(rateLimitMsg()); setTimeout(hideSuggest, 2500); return; }
@@ -1329,7 +1392,11 @@
   function watchFocusedEl(el) {
     _inputObserver?.disconnect();
     if (!el || !el.isContentEditable) return;
-    _inputObserver = new MutationObserver(() => handleTyping(el));
+    let _lastText = getText(el).trim();
+    _inputObserver = new MutationObserver(() => {
+      const t = getText(el).trim();
+      if (t !== _lastText) { _lastText = t; handleTyping(el); }
+    });
     _inputObserver.observe(el, { childList: true, subtree: true, characterData: true });
   }
 
