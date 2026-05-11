@@ -1,25 +1,31 @@
-try { importScripts("config.js"); } catch (_) {} // gitignored — add your keys there
-if (typeof DEFAULT_KEYS === "undefined") var DEFAULT_KEYS = []; // fallback: enter key via popup
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 let keyIndex = 0;
 
-// Seed keys to storage on startup so popup shows no warning
-chrome.storage.local.get(["te_api_keys", "te_settings"], r => {
-  const keys = r.te_api_keys?.length ? r.te_api_keys : DEFAULT_KEYS;
-  const updates = {};
-  if (!r.te_api_keys?.length)  updates.te_api_keys = DEFAULT_KEYS;
-  if (!r.te_settings?.apiKey)  updates.te_settings = { ...(r.te_settings || {}), apiKey: keys[0] };
-  if (Object.keys(updates).length) chrome.storage.local.set(updates);
+// Load keys from gitignored config.json, seed into storage, fall back to popup entry
+async function loadConfigKeys() {
+  try {
+    const r = await fetch(chrome.runtime.getURL("config.json"));
+    if (r.ok) return await r.json();
+  } catch (_) {}
+  return [];
+}
+
+loadConfigKeys().then(configKeys => {
+  chrome.storage.local.get(["te_api_keys", "te_settings"], r => {
+    const keys = r.te_api_keys?.length ? r.te_api_keys : configKeys;
+    const updates = {};
+    if (!r.te_api_keys?.length && configKeys.length) updates.te_api_keys = configKeys;
+    if (!r.te_settings?.apiKey && keys[0])           updates.te_settings = { ...(r.te_settings || {}), apiKey: keys[0] };
+    if (Object.keys(updates).length) chrome.storage.local.set(updates);
+  });
 });
 
-function getKeys() {
-  return new Promise(resolve => {
-    chrome.storage.local.get("te_api_keys", r => {
-      const keys = (r.te_api_keys || []).filter(k => k?.trim());
-      resolve(keys.length ? keys : DEFAULT_KEYS);
-    });
-  });
+async function getKeys() {
+  const r = await new Promise(resolve => chrome.storage.local.get("te_api_keys", resolve));
+  const stored = (r.te_api_keys || []).filter(k => k?.trim());
+  if (stored.length) return stored;
+  return loadConfigKeys();
 }
 
 const controllers = new Map();
