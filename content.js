@@ -1419,29 +1419,27 @@
     handleTyping(editableRoot(target));
   }
 
-  // listen on input + keyup + paste + compositionend
-  // keyup is a fallback for Brave which sometimes doesn't fire 'input' on contenteditable
-  document.addEventListener("input",          onInput);
+  // Capture phase so LinkedIn/modal sites can't stop propagation before we see the event
+  document.addEventListener("input",          onInput,                              { capture: true });
   document.addEventListener("keyup",          (e) => {
-    // Brave: catch all keys that could change text content
     const ignore = ["Shift","Control","Alt","Meta","CapsLock","Tab","Escape",
                     "ArrowLeft","ArrowRight","ArrowUp","ArrowDown",
                     "Home","End","PageUp","PageDown","F1","F2","F3","F4",
                     "F5","F6","F7","F8","F9","F10","F11","F12"];
     if (!ignore.includes(e.key)) onInput(e);
-  });
-  document.addEventListener("paste",          (e) => setTimeout(() => onInput(e), 50));
-  document.addEventListener("compositionend", onInput);
+  },                                                                                { capture: true });
+  document.addEventListener("paste",          (e) => setTimeout(() => onInput(e), 50), { capture: true });
+  document.addEventListener("compositionend", onInput,                              { capture: true });
 
-  // Brave fallback: click also triggers toolbar in case focusin is suppressed
+  // Capture phase: fires before LinkedIn/modal stopPropagation
   document.addEventListener("click", (e) => {
     if (!isEditable(e.target)) return;
     const el = editableRoot(e.target);
-    if (focused === el) return; // already handled by focusin
+    if (focused === el) return;
     focused = el; lastFocused = el;
     positionToolbar(el);
     watchFocusedEl(el);
-  });
+  }, { capture: true });
 
   // MutationObserver fallback: watch focused element's text content for changes
   // Catches Brave cases where neither input nor keyup fires
@@ -1463,7 +1461,7 @@
     focused = el; lastFocused = el;
     positionToolbar(el);
     watchFocusedEl(el);
-  });
+  }, { capture: true });
 
   document.addEventListener("focusout", (e) => {
     _inputObserver?.disconnect(); _inputObserver = null;
@@ -1732,7 +1730,7 @@
     const s = getSrBtn();
     if (s) s.textContent = MOOD_ICON[mood] || "💬";
     startNewMessageWatcher(el);
-  });
+  }, { capture: true });
 
   // ── Warmup: ask background to load the model so first real request is instant
   setTimeout(() => {
