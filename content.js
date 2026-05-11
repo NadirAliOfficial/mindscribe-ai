@@ -1355,13 +1355,18 @@
 
     positionToolbar(el);
 
-    // Auto-suggest: only when site is enabled, text is long enough, and there's a detectable error
-    if (CFG.autoSuggest && !siteDisabled && text.length >= CFG.minLength && text !== lastSuggestInput && !shouldSkip(text) && typoScore(text) > 0) {
+    // Auto-suggest: only when site is enabled, text has a detectable error, and meets minimum length
+    // When an error is detected the threshold drops to 3 chars so short words like "ys gr" still fire
+    const _score  = typoScore(text);
+    const _minLen = _score > 0 ? 3 : CFG.minLength;
+    if (CFG.autoSuggest && !siteDisabled && _score > 0 && text.length >= _minLen && text !== lastSuggestInput && !shouldSkip(text)) {
       suggestTimer = setTimeout(() => {
         if (focused !== el) return;
         if (isRateLimited()) { showSuggestLoading(el, "suggest"); showSuggestResult(rateLimitMsg()); setTimeout(hideSuggest, 2500); return; }
         const current = getText(el).trim();
-        if (current.length < CFG.minLength || current === lastSuggestInput || shouldSkip(current)) return;
+        const cScore  = typoScore(current);
+        const cMin    = cScore > 0 ? 3 : CFG.minLength;
+        if (current.length < cMin || current === lastSuggestInput || shouldSkip(current) || cScore === 0) return;
 
         const myId   = ++suggestGenId;
         const action = pickAction(current);
