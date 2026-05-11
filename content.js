@@ -1416,7 +1416,7 @@
   function onInput(e) {
     const target = e?.target || document.activeElement;
     if (!isEditable(target)) return;
-    handleTyping(target);
+    handleTyping(editableRoot(target));
   }
 
   // listen on input + keyup + paste + compositionend
