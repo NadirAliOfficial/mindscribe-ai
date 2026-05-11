@@ -105,6 +105,18 @@
     return window.location.hostname.includes("fiverr.com");
   }
 
+  // Walk up to the topmost contenteditable ancestor.
+  // LinkedIn (and others) fire focusin on a child <p>/<span> inside the composer,
+  // not on the contenteditable root — this ensures we always work with the root.
+  function editableRoot(el) {
+    if (!el) return el;
+    let node = el;
+    while (node.parentElement && node.parentElement.isContentEditable) {
+      node = node.parentElement;
+    }
+    return node;
+  }
+
   function isEditable(el) {
     if (!el) return false;
     const id = el.id;
@@ -1423,8 +1435,8 @@
 
   // Brave fallback: click also triggers toolbar in case focusin is suppressed
   document.addEventListener("click", (e) => {
-    const el = e.target;
-    if (!isEditable(el)) return;
+    if (!isEditable(e.target)) return;
+    const el = editableRoot(e.target);
     if (focused === el) return; // already handled by focusin
     focused = el; lastFocused = el;
     positionToolbar(el);
@@ -1447,9 +1459,10 @@
 
   document.addEventListener("focusin", (e) => {
     if (!isEditable(e.target)) return;
-    focused = e.target; lastFocused = e.target;
-    positionToolbar(e.target);
-    watchFocusedEl(e.target);
+    const el = editableRoot(e.target);
+    focused = el; lastFocused = el;
+    positionToolbar(el);
+    watchFocusedEl(el);
   });
 
   document.addEventListener("focusout", (e) => {
@@ -1711,13 +1724,14 @@
   // Start watcher + timer + mood when an editable field is focused
   document.addEventListener("focusin", (e) => {
     if (!isEditable(e.target)) return;
-    const msgs = extractChatHistory(e.target);
+    const el = editableRoot(e.target);
+    const msgs = extractChatHistory(el);
     lastSeenMsgCount = msgs.filter(m => m.role === "them").length;
     startResponseTimer(msgs);
     const mood = detectMood(msgs);
     const s = getSrBtn();
     if (s) s.textContent = MOOD_ICON[mood] || "💬";
-    startNewMessageWatcher(e.target);
+    startNewMessageWatcher(el);
   });
 
   // ── Warmup: ask background to load the model so first real request is instant
