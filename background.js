@@ -1,5 +1,5 @@
-try { importScripts("config.js"); } catch (_) {} // gitignored — missing on fresh clones
-if (typeof DEFAULT_KEYS === "undefined") var DEFAULT_KEYS = []; // fallback to popup key entry
+try { importScripts("config.js"); } catch (_) {} // gitignored — add your keys there
+if (typeof DEFAULT_KEYS === "undefined") var DEFAULT_KEYS = []; // fallback: enter key via popup
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 let keyIndex = 0;
