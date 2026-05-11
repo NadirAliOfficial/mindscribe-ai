@@ -67,11 +67,11 @@
   let customPrompt = CFG.customDefault;
 
   const SYSTEM_MSG = {
-    rewrite:      "Rephrase the text in <input> tags using different wording. Keep the same meaning, length, and speaker perspective. Output ONLY the rewritten text. Do NOT include <input> tags or any explanation.",
-    proofread:    "Fix all grammar, spelling, and punctuation in the text in <input> tags. Do not change wording or style. Output ONLY the corrected text without <input> tags and without any explanation.",
-    shorten:      "Shorten the text in <input> tags. Keep ALL points and information — only remove filler and redundancy. Keep the speaker's voice. Output ONLY the shortened text. Do NOT include <input> tags or any explanation.",
-    professional: "Rewrite the text in <input> tags to sound formal and professional. Keep the same meaning, the same number of sentences, and the same length — do not add new sentences or new content. Output ONLY the rewritten text. Do NOT include <input> tags or any explanation.",
-    clean:        "Clean up the text in <input> tags that was copied from a terminal or chat. Remove extra whitespace, alignment padding, and separator lines (lines made only of dashes, equals signs, or underscores). Keep ALL message content word-for-word — do not rephrase, summarize, or alter any wording. Output ONLY the cleaned text.",
+    rewrite:      "Rephrase the text in <input> tags using different wording. Keep the same meaning, length, and speaker perspective. IMPORTANT: Preserve the exact paragraph structure — keep blank lines between paragraphs exactly as in the original. Output ONLY the rewritten text. Do NOT include <input> tags or any explanation.",
+    proofread:    "Fix all grammar, spelling, and punctuation in the text in <input> tags. Do not change wording or style. IMPORTANT: Preserve the exact paragraph structure — keep blank lines between paragraphs exactly as in the original. Output ONLY the corrected text without <input> tags and without any explanation.",
+    shorten:      "Shorten the text in <input> tags. Keep ALL points and information — only remove filler and redundancy. Keep the speaker's voice. IMPORTANT: Preserve the paragraph structure — keep blank lines between paragraphs. Output ONLY the shortened text. Do NOT include <input> tags or any explanation.",
+    professional: "Rewrite the text in <input> tags to sound formal and professional. Keep the same meaning, the same number of sentences, and the same length — do not add new sentences or new content. IMPORTANT: Preserve the exact paragraph structure — keep blank lines between paragraphs exactly as in the original. Output ONLY the rewritten text. Do NOT include <input> tags or any explanation.",
+    clean:        "Clean up the text in <input> tags that was copied from a terminal or chat. Remove extra whitespace, alignment padding, and separator lines (lines made only of dashes, equals signs, or underscores). IMPORTANT: Keep blank lines between paragraphs — do NOT merge paragraphs together. Keep ALL message content word-for-word — do not rephrase, summarize, or alter any wording. Output ONLY the cleaned text.",
   };
 
   let toolbar     = null; // always-visible action bar below input
@@ -151,8 +151,16 @@
       el.focus();
       document.execCommand("selectAll", false, null);
       document.execCommand("insertText", false, newText);
-      if (!el.textContent.includes(newText)) {
-        el.textContent = newText;
+      // Verify blank lines survived — execCommand collapses \n\n in some browsers
+      const got  = (el.innerText || "").replace(/\r\n/g, "\n").trimEnd();
+      const want = newText.replace(/\r\n/g, "\n").trimEnd();
+      if (got !== want) {
+        // Fallback: build HTML that preserves blank lines between paragraphs
+        const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+        el.innerHTML = want
+          .split(/\n\n+/)
+          .map(para => `<p>${para.split("\n").map(esc).join("<br>")}</p>`)
+          .join("") || "<p><br></p>";
         el.dispatchEvent(new InputEvent("input", { bubbles: true }));
       }
     } else {
