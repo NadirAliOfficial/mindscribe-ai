@@ -792,19 +792,29 @@
 
   function typoScore(text) {
     let score = 0;
-    const lo = text.toLowerCase();
-    // Shorthand / chat abbreviations
-    if (/\b(u|r|ur|pls|thx|ty|idk|omg|lol|btw|fyi|asap|tbh|imo|ngl|smh|bro|dude|gonna|gotta|wanna|kinda|nope|yep|nah)\b/.test(lo)) score++;
-    // Missing apostrophes in contractions
-    if (/\b(dont|cant|wont|im|ive|its|theyre|youre|didnt|wasnt|isnt|wouldnt|couldnt|havent|shouldnt)\b/.test(lo)) score++;
-    // All lowercase with meaningful length
-    if (text.length > 20 && text === text.toLowerCase()) score++;
-    // Common misspellings
-    if (/\b(recieve|occured|seperate|definately|freind|wierd|beleive|untill|begining|goverment|occassion)\b/.test(lo)) score++;
-    // Words with no vowels (2+ chars) are almost certainly typos — catches "ys", "teh", "whn", etc.
-    // Skip known abbreviations: mr, dr, vs, st, jr, sr, hr, nth, gym, etc.
-    const noVowel = /\b(?!(?:mr|dr|vs|st|jr|sr|hr|nth|gym|psych|rhythm|Lynch|tryst)\b)[bcdfghjklmnpqrstvwxyz]{2,}\b/;
-    if (noVowel.test(lo)) score++;
+    const words = text.trim().split(/\s+/);
+
+    // Lowercase-only letters of each word — uppercase stripped so "Mr" → "r" (length 1, ignored)
+    const lowerLetters = w => w.replace(/[^a-z]/g, "");
+
+    // 1. Any 2+ char all-lowercase word with zero vowels → almost certainly a typo ("ys", "teh", "whn")
+    if (words.some(w => { const l = lowerLetters(w); return l.length >= 2 && !/[aeiou]/.test(l); })) score++;
+
+    // 2. First visible character is lowercase → missing capitalisation
+    if (/^[a-z]/.test(text.trimStart())) score++;
+
+    // 3. Punctuation immediately followed by a letter with no space ("hello.World", "ok,go")
+    if (/[.!?,;][A-Za-z]/.test(text)) score++;
+
+    // 4. Three or more of the same letter in a row ("coool", "heyyyy") → unintentional repeat
+    if (/([a-zA-Z])\1{2,}/.test(text)) score++;
+
+    // 5. Word of 5+ letters whose vowel ratio is below 20% ("strngth" → 0%, "rhythm" edge case)
+    if (words.some(w => {
+      const l = w.replace(/[^a-zA-Z]/g, "").toLowerCase();
+      return l.length >= 5 && (l.match(/[aeiou]/g) || []).length / l.length < 0.2;
+    })) score++;
+
     return score;
   }
 
