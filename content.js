@@ -41,7 +41,7 @@
   function applySettings(s) {
     if (!s) return;
     Object.assign(CFG, s);
-    if (srBtn)   srBtn.style.display   = CFG.srEnabled   && (focused || lastFocused) ? "flex" : "none";
+    if (srBtn)   srBtn.style.display   = CFG.srEnabled && isChatSite() && (focused || lastFocused) ? "flex" : "none";
     if (toolbar) toolbar.style.display = CFG.showTrigger && (focused || lastFocused) ? "flex" : "none";
   }
 
@@ -101,13 +101,22 @@
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
+  function isChatSite() {
+    const host = window.location.hostname;
+    const path = window.location.pathname;
+    if (host.includes("web.whatsapp.com"))  return true;
+    if (host.includes("fiverr.com"))        return true;
+    if (host.includes("upwork.com"))        return true;
+    if (host.includes("freelancer.com"))    return true;
+    if (host.includes("linkedin.com") && path.includes("messaging")) return true;
+    return false;
+  }
+
   function isEditable(el) {
     if (!el) return false;
     const id = el.id;
     if (id === "te-toolbar" || id === "te-suggest") return false;
     if (el.closest && el.closest("#te-suggest, #te-toolbar")) return false;
-    // On LinkedIn, skip all contentEditable divs — the AI commenter handles those
-    if (el.isContentEditable && window.location.hostname.includes("linkedin.com")) return false;
     if (el.isContentEditable) return true;
     const tag = el.tagName;
     if (tag === "TEXTAREA") return true;
@@ -428,8 +437,9 @@
   function positionToolbar(el) {
     const t = getToolbar();
     const s = getSrBtn();
-    if (CFG.showTrigger) t.style.display = "flex";
-    if (CFG.srEnabled)   s.style.display = "flex";
+    if (CFG.showTrigger)                t.style.display = "flex";
+    if (CFG.srEnabled && isChatSite())  s.style.display = "flex";
+    else                                s.style.display = "none";
     if (!toolbarDragged) {
       const r = el.getBoundingClientRect();
       t.style.top  = Math.min(r.bottom + 6, window.innerHeight - 46) + "px";
