@@ -102,14 +102,7 @@
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   function isChatSite() {
-    const host = window.location.hostname;
-    const path = window.location.pathname;
-    if (host.includes("web.whatsapp.com"))  return true;
-    if (host.includes("fiverr.com"))        return true;
-    if (host.includes("upwork.com"))        return true;
-    if (host.includes("freelancer.com"))    return true;
-    if (host.includes("linkedin.com") && path.includes("messaging")) return true;
-    return false;
+    return window.location.hostname.includes("fiverr.com");
   }
 
   function isEditable(el) {
@@ -801,13 +794,17 @@
     let score = 0;
     const lo = text.toLowerCase();
     // Shorthand / chat abbreviations
-    if (/\b(u|r|ur|pls|thx|ty|idk|omg|lol|btw|fyi|asap|tbh|imo|ngl|smh)\b/.test(lo)) score++;
+    if (/\b(u|r|ur|pls|thx|ty|idk|omg|lol|btw|fyi|asap|tbh|imo|ngl|smh|bro|dude|gonna|gotta|wanna|kinda|nope|yep|nah)\b/.test(lo)) score++;
     // Missing apostrophes in contractions
     if (/\b(dont|cant|wont|im|ive|its|theyre|youre|didnt|wasnt|isnt|wouldnt|couldnt|havent|shouldnt)\b/.test(lo)) score++;
     // All lowercase with meaningful length
     if (text.length > 20 && text === text.toLowerCase()) score++;
     // Common misspellings
     if (/\b(recieve|occured|seperate|definately|freind|wierd|beleive|untill|begining|goverment|occassion)\b/.test(lo)) score++;
+    // Words with no vowels (2+ chars) are almost certainly typos — catches "ys", "teh", "whn", etc.
+    // Skip known abbreviations: mr, dr, vs, st, jr, sr, hr, nth, gym, etc.
+    const noVowel = /\b(?!(?:mr|dr|vs|st|jr|sr|hr|nth|gym|psych|rhythm|Lynch|tryst)\b)[bcdfghjklmnpqrstvwxyz]{2,}\b/;
+    if (noVowel.test(lo)) score++;
     return score;
   }
 
