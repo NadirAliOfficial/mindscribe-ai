@@ -22,10 +22,14 @@ loadConfigKeys().then(configKeys => {
 });
 
 async function getKeys() {
-  const r = await new Promise(resolve => chrome.storage.local.get("te_api_keys", resolve));
+  const [r, configKeys] = await Promise.all([
+    new Promise(resolve => chrome.storage.local.get("te_api_keys", resolve)),
+    loadConfigKeys(),
+  ]);
   const stored = (r.te_api_keys || []).filter(k => k?.trim());
-  if (stored.length) return stored;
-  return loadConfigKeys();
+  // Always merge config.json keys with any popup-entered keys so all are tried on 429
+  const all = [...new Set([...configKeys, ...stored])];
+  return all.length ? all : [];
 }
 
 const controllers = new Map();
