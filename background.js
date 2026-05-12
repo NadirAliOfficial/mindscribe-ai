@@ -53,8 +53,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   };
 
   getKeys().then(async keys => {
+    const startIdx = keyIndex;
     for (let i = 0; i < keys.length; i++) {
-      const key = keys[(keyIndex + i) % keys.length];
+      const key = keys[(startIdx + i) % keys.length];
       try {
         const r = await fetch(GROQ_URL, {
           method: "POST",
@@ -69,7 +70,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return;
         }
         if (r.status === 429) {
-          keyIndex = (keyIndex + i + 1) % keys.length;
+          keyIndex = (startIdx + i + 1) % keys.length;
           if (i < keys.length - 1) continue;
           const wait = r.headers.get("retry-after") || r.headers.get("x-ratelimit-reset-requests") || "60";
           throw new Error("rate_limited:" + Math.ceil(Number(wait) || 60));
@@ -108,8 +109,9 @@ chrome.runtime.onConnect.addListener((port) => {
       stream: true,
     };
 
+    const startIdx = keyIndex;
     for (let i = 0; i < keys.length; i++) {
-      const key = keys[(keyIndex + i) % keys.length];
+      const key = keys[(startIdx + i) % keys.length];
       try {
         const resp = await fetch(GROQ_URL, {
           method: "POST",
@@ -120,7 +122,7 @@ chrome.runtime.onConnect.addListener((port) => {
 
         if (!resp.ok) {
           if (resp.status === 429) {
-            keyIndex = (keyIndex + i + 1) % keys.length;
+            keyIndex = (startIdx + i + 1) % keys.length;
             if (i < keys.length - 1) continue;
             const wait = resp.headers.get("retry-after") || resp.headers.get("x-ratelimit-reset-requests") || "60";
             port.postMessage({ error: "rate_limited:" + Math.ceil(Number(wait) || 60) });
