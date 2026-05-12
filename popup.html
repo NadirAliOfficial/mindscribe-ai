@@ -150,12 +150,21 @@
   }
   .toast.show { opacity: 1; }
 
-  .api-key-row { position: relative; }
+  .api-key-row { position: relative; margin-top: 6px; }
   .api-key-row .eye-btn {
     position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
     background: none; border: none; color: #555; cursor: pointer; font-size: 14px;
-    margin-top: 3px;
   }
+  .key-slot-label {
+    font-size: 11px; color: #555; margin-bottom: 3px; display: flex;
+    justify-content: space-between; align-items: center;
+  }
+  .key-slot-label .key-status { font-size: 10px; }
+  .get-key-link {
+    display: block; margin-top: 10px; text-align: center; font-size: 11px;
+    color: #6c47ff; text-decoration: none;
+  }
+  .get-key-link:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -372,15 +381,28 @@
 
 <!-- ── API Tab ── -->
 <div class="panel" id="tab-api">
-  <div class="section-title">Groq API</div>
+  <div class="section-title">Groq API Keys</div>
 
   <div class="row">
     <div style="width:100%">
-      <div class="row-label">API Key</div>
-      <div class="api-key-row" style="margin-top:6px">
-        <input type="password" class="text-input" id="apiKey"
-          placeholder="gsk_..." style="margin-top:0;padding-right:32px">
-        <button class="eye-btn" id="eyeBtn" title="Show/hide">👁</button>
+      <div class="row-sub" style="margin-bottom:8px">Add up to 3 keys — automatically rotated when rate limited. Get a free key at <a href="https://console.groq.com" target="_blank" style="color:#6c47ff">console.groq.com</a></div>
+
+      <div class="key-slot-label"><span>Key 1</span><span class="key-status" id="keyStatus1"></span></div>
+      <div class="api-key-row">
+        <input type="password" class="text-input" id="apiKey1" placeholder="gsk_..." style="margin-top:0;padding-right:32px">
+        <button class="eye-btn" data-target="apiKey1" title="Show/hide">👁</button>
+      </div>
+
+      <div class="key-slot-label" style="margin-top:10px"><span>Key 2</span><span class="key-status" id="keyStatus2"></span></div>
+      <div class="api-key-row">
+        <input type="password" class="text-input" id="apiKey2" placeholder="gsk_... (optional)" style="margin-top:0;padding-right:32px">
+        <button class="eye-btn" data-target="apiKey2" title="Show/hide">👁</button>
+      </div>
+
+      <div class="key-slot-label" style="margin-top:10px"><span>Key 3</span><span class="key-status" id="keyStatus3"></span></div>
+      <div class="api-key-row">
+        <input type="password" class="text-input" id="apiKey3" placeholder="gsk_... (optional)" style="margin-top:0;padding-right:32px">
+        <button class="eye-btn" data-target="apiKey3" title="Show/hide">👁</button>
       </div>
     </div>
   </div>
@@ -412,11 +434,12 @@
 
   <div class="row">
     <div>
-      <div class="row-label">Connection</div>
+      <div class="row-label">Test connection</div>
+      <div class="row-sub">Checks all filled keys</div>
     </div>
     <button id="testBtn" style="background:#1e1e1e;border:1px solid #444;color:#ccc;
       padding:5px 12px;border-radius:7px;cursor:pointer;font-size:12px;font-family:inherit;">
-      Test API
+      Test Keys
     </button>
   </div>
 
