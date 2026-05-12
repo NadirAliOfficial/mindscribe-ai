@@ -40,9 +40,10 @@ function scheduleSave() {
 }
 
 // ── Load settings ─────────────────────────────────────────────────────────────
-chrome.storage.local.get(["te_settings", "te_custom_prompt"], (r) => {
+chrome.storage.local.get(["te_settings", "te_custom_prompt", "te_api_keys"], (r) => {
   if (r.te_settings)      settings = { ...DEFAULTS, ...r.te_settings };
   if (r.te_custom_prompt) settings.customDefault = r.te_custom_prompt;
+  if (r.te_api_keys)      settings.apiKeys = r.te_api_keys;
   renderAll();
 });
 
@@ -109,14 +110,29 @@ document.getElementById("modelSelect").addEventListener("change", (e) => {
 document.getElementById("customDefault").addEventListener("input", (e) => {
   settings.customDefault = e.target.value; scheduleSave();
 });
-document.getElementById("apiKey").addEventListener("input", (e) => {
-  settings.apiKey = e.target.value.trim(); scheduleSave();
+// ── 3 API key slots ───────────────────────────────────────────────────────────
+function saveKeys() {
+  const keys = [
+    document.getElementById("apiKey1").value.trim(),
+    document.getElementById("apiKey2").value.trim(),
+    document.getElementById("apiKey3").value.trim(),
+  ].filter(Boolean);
+  chrome.storage.local.set({ te_api_keys: keys }, () => showToast("✓ Keys saved"));
+}
+
+["apiKey1","apiKey2","apiKey3"].forEach(id => {
+  document.getElementById(id).addEventListener("input", () => {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveKeys, 600);
+  });
 });
 
-// ── Eye button ────────────────────────────────────────────────────────────────
-document.getElementById("eyeBtn").addEventListener("click", () => {
-  const inp = document.getElementById("apiKey");
-  inp.type = inp.type === "password" ? "text" : "password";
+// ── Eye buttons ───────────────────────────────────────────────────────────────
+document.querySelectorAll(".eye-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const inp = document.getElementById(btn.dataset.target);
+    if (inp) inp.type = inp.type === "password" ? "text" : "password";
+  });
 });
 
 // ── Action toggles ────────────────────────────────────────────────────────────
@@ -150,25 +166,36 @@ function buildActionToggles() {
 document.getElementById("testBtn").addEventListener("click", async () => {
   const btn = document.getElementById("testBtn");
   btn.textContent = "Testing…"; btn.disabled = true;
-  try {
-    const key = settings.apiKey || document.getElementById("apiKey").value.trim();
-    if (!key) throw new Error("Enter API key first");
-    const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
-      body: JSON.stringify({
-        model: settings.modelSelect || "llama-3.3-70b-versatile",
-        messages: [{ role: "user", content: "Hi" }],
-        max_tokens: 5,
-      }),
-    });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    btn.textContent = "✓ Connected"; btn.style.color = "#4ade80";
-    setTimeout(() => { btn.textContent = "Test API"; btn.style.color = ""; btn.disabled = false; }, 2500);
-  } catch (e) {
-    btn.textContent = "✗ " + e.message; btn.style.color = "#f87171";
-    setTimeout(() => { btn.textContent = "Test API"; btn.style.color = ""; btn.disabled = false; }, 3000);
+
+  const keys = [
+    document.getElementById("apiKey1").value.trim(),
+    document.getElementById("apiKey2").value.trim(),
+    document.getElementById("apiKey3").value.trim(),
+  ].filter(Boolean);
+
+  if (!keys.length) {
+    btn.textContent = "✗ Add a key first"; btn.style.color = "#f87171";
+    setTimeout(() => { btn.textContent = "Test Keys"; btn.style.color = ""; btn.disabled = false; }, 2500);
+    return;
   }
+
+  let passed = 0, failed = 0;
+  for (let i = 0; i < keys.length; i++) {
+    try {
+      const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + keys[i] },
+        body: JSON.stringify({ model: settings.modelSelect || "llama-3.3-70b-versatile", messages: [{ role: "user", content: "Hi" }], max_tokens: 5 }),
+      });
+      const status = document.getElementById("keyStatus" + (i + 1));
+      if (r.ok) { passed++; if (status) { status.textContent = "✓"; status.style.color = "#4ade80"; } }
+      else       { failed++; if (status) { status.textContent = r.status === 429 ? "Rate limited" : "✗ " + r.status; status.style.color = "#f87171"; } }
+    } catch (_) { failed++; }
+  }
+
+  btn.textContent = passed + "/" + keys.length + " OK";
+  btn.style.color = failed === 0 ? "#4ade80" : passed > 0 ? "#e3a008" : "#f87171";
+  setTimeout(() => { btn.textContent = "Test Keys"; btn.style.color = ""; btn.disabled = false; }, 3000);
 });
 
 // ── Remove individual save buttons — auto-save handles everything ─────────────
@@ -231,16 +258,22 @@ function renderAll() {
 
   // Text inputs
   document.getElementById("customDefault").value = settings.customDefault || DEFAULTS.customDefault;
-  if (settings.apiKey) document.getElementById("apiKey").value = settings.apiKey;
+
+  // API key slots — load from te_api_keys array
+  const keys = settings.apiKeys || [];
+  ["apiKey1","apiKey2","apiKey3"].forEach((id, i) => {
+    document.getElementById(id).value = keys[i] || "";
+  });
 
   // Action toggles
   buildActionToggles();
 
-  // Warn if no key
+  // Warn if no keys
   const badge = document.getElementById("statusBadge");
   const label = document.getElementById("statusText");
   const dot   = badge?.querySelector(".status-dot");
-  if (!settings.apiKey) {
+  const hasKey = (settings.apiKeys || []).some(k => k?.trim());
+  if (!hasKey) {
     if (label) label.textContent = "No API key";
     if (dot)   dot.style.background = "#f87171";
     if (badge) badge.style.background = "#3a1a1a", badge.style.borderColor = "#6e2a2a", badge.style.color = "#f87171";
