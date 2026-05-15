@@ -1,8 +1,8 @@
-const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+const GROQ_URL   = "https://api.groq.com/openai/v1/chat/completions";
+const OLLAMA_URL = "http://localhost:11434/api/chat";
 
 let keyIndex = 0;
 
-// Load keys from gitignored config.json, seed into storage, fall back to popup entry
 async function loadConfigKeys() {
   try {
     const r = await fetch(chrome.runtime.getURL("config.json"));
@@ -27,9 +27,16 @@ async function getKeys() {
     loadConfigKeys(),
   ]);
   const stored = (r.te_api_keys || []).filter(k => k?.trim());
-  // Always merge config.json keys with any popup-entered keys so all are tried on 429
   const all = [...new Set([...configKeys, ...stored])];
   return all.length ? all : [];
+}
+
+async function getBackend() {
+  return new Promise(resolve =>
+    chrome.storage.local.get("te_settings", r =>
+      resolve(r.te_settings?.modelBackend || "groq")
+    )
+  );
 }
 
 const controllers = new Map();
@@ -44,15 +51,58 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   controllers.set(tabId, ctrl);
 
   const { messages, options = {} } = message.payload;
-  const body = {
-    model: message.payload.model || "llama-3.3-70b-versatile",
-    messages,
-    temperature: options.temperature ?? 0.3,
-    ...(options.num_predict > 0 ? { max_tokens: options.num_predict } : {}),
-    stream: false,
-  };
 
-  getKeys().then(async keys => {
+  (async () => {
+    const backend = await getBackend();
+
+    if (backend === "ollama") {
+      const body = {
+        model: "llama3.2:latest",
+        messages,
+        stream: false,
+        options: {
+          temperature: options.temperature ?? 0.3,
+          ...(options.num_predict > 0 ? { num_predict: options.num_predict } : {}),
+        },
+      };
+      try {
+        const r = await fetch(OLLAMA_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: ctrl.signal,
+        });
+        controllers.delete(tabId);
+        if (r.ok) {
+          const data = await r.json();
+          sendResponse({ ok: true, text: data.message?.content || "" });
+        } else {
+          sendResponse({ ok: false, error: "Ollama " + r.status + " — is Ollama running?" });
+        }
+      } catch (e) {
+        if (e.name === "AbortError") { controllers.delete(tabId); return; }
+        controllers.delete(tabId);
+        sendResponse({ ok: false, error: "Ollama not reachable — run: ollama serve" });
+      }
+      return;
+    }
+
+    // ── Groq path ────────────────────────────────────────────────────────────
+    const keys = await getKeys();
+    if (!keys.length) {
+      controllers.delete(tabId);
+      sendResponse({ ok: false, error: "No API key — add one in popup → API tab" });
+      return;
+    }
+
+    const body = {
+      model: message.payload.model || "llama-3.3-70b-versatile",
+      messages,
+      temperature: options.temperature ?? 0.3,
+      ...(options.num_predict > 0 ? { max_tokens: options.num_predict } : {}),
+      stream: false,
+    };
+
     const startIdx = keyIndex;
     for (let i = 0; i < keys.length; i++) {
       const key = keys[(startIdx + i) % keys.length];
@@ -84,7 +134,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
     }
-  });
+  })();
 
   return true;
 });
@@ -99,8 +149,61 @@ chrome.runtime.onConnect.addListener((port) => {
     ctrl?.abort();
     ctrl = new AbortController();
 
-    const keys = await getKeys();
+    const backend = await getBackend();
     const { messages, options = {} } = payload;
+
+    if (backend === "ollama") {
+      const body = {
+        model: "llama3.2:latest",
+        messages,
+        stream: true,
+        options: {
+          temperature: options.temperature ?? 0.3,
+          ...(options.num_predict > 0 ? { num_predict: options.num_predict } : {}),
+        },
+      };
+      try {
+        const resp = await fetch(OLLAMA_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: ctrl.signal,
+        });
+        if (!resp.ok) {
+          port.postMessage({ error: "Ollama " + resp.status + " — is Ollama running?" });
+          return;
+        }
+        const reader = resp.body.getReader();
+        const dec = new TextDecoder();
+        let buf = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) { port.postMessage({ done: true }); return; }
+          buf += dec.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop();
+          for (const line of lines) {
+            const t = line.trim();
+            if (!t) continue;
+            try {
+              const d = JSON.parse(t);
+              if (d.done) { port.postMessage({ done: true }); return; }
+              const token = d.message?.content;
+              if (token) port.postMessage({ token });
+            } catch (_) {}
+          }
+        }
+      } catch (e) {
+        if (e.name === "AbortError") return;
+        port.postMessage({ error: "Ollama not reachable — run: ollama serve" });
+      }
+      return;
+    }
+
+    // ── Groq streaming path ───────────────────────────────────────────────────
+    const keys = await getKeys();
+    if (!keys.length) { port.postMessage({ error: "No API key — add one in popup → API tab" }); return; }
+
     const body = {
       model: payload.model || "llama-3.3-70b-versatile",
       messages,

@@ -36,6 +36,7 @@
     disabledActions: [],
     modelSelect:     "llama-3.3-70b-versatile",
     temperature:     3,
+    modelBackend:    "groq",
   };
 
   function applySettings(s) {
@@ -72,6 +73,15 @@
     shorten:      "Shorten the text in <input> tags. Keep ALL points and information — only remove filler and redundancy. Keep the speaker's voice. IMPORTANT: Preserve the paragraph structure — keep blank lines between paragraphs. Output ONLY the shortened text. Do NOT include <input> tags or any explanation.",
     professional: "Rewrite the text in <input> tags to sound formal and professional. Keep the same meaning, the same number of sentences, and the same length — do not add new sentences or new content. IMPORTANT: Preserve the exact paragraph structure — keep blank lines between paragraphs exactly as in the original. Output ONLY the rewritten text. Do NOT include <input> tags or any explanation.",
     clean:        "Clean up the text in <input> tags that was copied from a terminal or chat. Remove extra whitespace, alignment padding, and separator lines (lines made only of dashes, equals signs, or underscores). IMPORTANT: Keep blank lines between paragraphs — do NOT merge paragraphs together. Keep ALL message content word-for-word — do not rephrase, summarize, or alter any wording. Output ONLY the cleaned text.",
+  };
+
+  // Shorter, stricter prompts for small local Ollama models which ignore long instructions
+  const SYSTEM_MSG_OLLAMA = {
+    rewrite:      "Rewrite the text inside <input> tags using different words. Same meaning, same length. Output ONLY the rewritten text, nothing else.",
+    proofread:    "Fix ONLY spelling and punctuation errors in the text inside <input> tags. Do NOT rephrase, reword, or change any words. Do NOT add or remove content. Output ONLY the corrected text.",
+    shorten:      "Remove filler words from the text inside <input> tags to make it shorter. Keep ALL the original information and every key word. Output ONLY the shortened text.",
+    professional: "Rewrite the text inside <input> tags to sound more formal. Same meaning, same length. Output ONLY the rewritten text.",
+    clean:        "Remove separator lines (---, ===) and extra spaces from the text inside <input> tags. Keep all words exactly as written. Output ONLY the cleaned text.",
   };
 
   let toolbar     = null; // always-visible action bar below input
@@ -712,6 +722,9 @@
 
   // Returns the right system message — shorten gets a precise word-count target
   function getSystemMsg(type, text) {
+    if (CFG.modelBackend === "ollama") {
+      return SYSTEM_MSG_OLLAMA[type] || SYSTEM_MSG[type];
+    }
     if (type === "shorten") {
       const w      = wordCount(text);
       const target = getShortenTarget(w, CFG.shortenStrength);
@@ -827,6 +840,12 @@
       return l.length >= 5 && (l.match(/[aeiou]/g) || []).length / l.length < 0.2;
     })) score++;
 
+    // 6. Sentence of 5+ words with no punctuation at all — almost certainly needs proofreading
+    if (words.length >= 5 && !/[.!?,;]/.test(text)) score++;
+
+    // 7. Repeated word back-to-back ("the the", "I I")
+    if (/\b(\w+)\s+\1\b/i.test(text)) score++;
+
     return score;
   }
 
@@ -847,15 +866,19 @@
 
   // Returns true if suggestion is too similar to original to be worth showing
   function tooSimilar(original, suggestion) {
-    const norm = s => s.toLowerCase().replace(/[^\w\s]/g, "").trim();
-    const a = norm(original);
-    const b = norm(suggestion);
-    if (a === b) return true;
-    const setA = new Set(a.split(/\s+/));
-    const setB = new Set(b.split(/\s+/));
+    // Exact match — nothing changed at all
+    if (original.trim() === suggestion.trim()) return true;
+    const wordNorm = s => s.toLowerCase().replace(/[^\w\s]/g, "").trim();
+    const wa = wordNorm(original);
+    const wb = wordNorm(suggestion);
+    // Same words but different punctuation/capitalisation — proofread fixed it, show it
+    if (wa === wb) return false;
+    // Different words — check overlap; hide only if nearly identical
+    const setA = new Set(wa.split(/\s+/));
+    const setB = new Set(wb.split(/\s+/));
     const shared = [...setA].filter(w => setB.has(w)).length;
     const union  = new Set([...setA, ...setB]).size;
-    return shared / union >= 0.88;
+    return shared / union >= 0.95;
   }
 
   // Open a streaming port to background, call onToken(rawSoFar) as tokens arrive,
@@ -1368,17 +1391,14 @@
     positionToolbar(el);
 
     // Auto-suggest: only when site is enabled, text has a detectable error, and meets minimum length
-    // When an error is detected the threshold drops to 3 chars so short words like "ys gr" still fire
-    const _score  = typoScore(text);
-    const _minLen = _score > 0 ? 3 : CFG.minLength;
-    if (CFG.autoSuggest && !siteDisabled && _score > 0 && text.length >= _minLen && text !== lastSuggestInput && !shouldSkip(text)) {
+    const _score = typoScore(text);
+    if (CFG.autoSuggest && !siteDisabled && _score > 0 && text.length >= CFG.minLength && text !== lastSuggestInput && !shouldSkip(text)) {
       suggestTimer = setTimeout(() => {
         if (focused !== el) return;
-        if (isRateLimited()) { showSuggestLoading(el, "suggest"); showSuggestResult(rateLimitMsg()); setTimeout(hideSuggest, 2500); return; }
+        if (CFG.modelBackend !== "ollama" && isRateLimited()) { showSuggestLoading(el, "suggest"); showSuggestResult(rateLimitMsg()); setTimeout(hideSuggest, 2500); return; }
         const current = getText(el).trim();
         const cScore  = typoScore(current);
-        const cMin    = cScore > 0 ? 3 : CFG.minLength;
-        if (current.length < cMin || current === lastSuggestInput || shouldSkip(current) || cScore === 0) return;
+        if (current.length < CFG.minLength || current === lastSuggestInput || shouldSkip(current) || cScore === 0) return;
 
         const myId   = ++suggestGenId;
         const action = pickAction(current);
@@ -1732,19 +1752,5 @@
     startNewMessageWatcher(el);
   }, { capture: true });
 
-  // ── Warmup: ask background to load the model so first real request is instant
-  setTimeout(() => {
-    try {
-      runtimeSendMessage({
-        type: "ollama",
-        payload: {
-          model: MODEL,
-          stream: false,
-          messages: [{ role: "user", content: "." }],
-          options: { num_predict: 1, num_ctx: 256, keep_alive: -1 },
-        },
-      }, () => { chrome.runtime?.lastError; });
-    } catch (_) {}
-  }, 3000);
 
 })();
