@@ -17,6 +17,7 @@ const DEFAULTS = {
   apiKey:          "",
   modelSelect:     "llama-3.3-70b-versatile",
   temperature:     3,
+  modelBackend:    "groq",
 };
 
 const ACTIONS = ["improve","rewrite","proofread","shorten","professional","friendly","translate","custom"];
@@ -75,6 +76,7 @@ initRadioGroup("replyLength",     "replyLength");
 initRadioGroup("replyTone",       "replyTone");
 initRadioGroup("followUpHours",   "followUpHours");
 initRadioGroup("shortenStrength", "shortenStrength");
+initRadioGroup("modelBackend",    "modelBackend");
 
 // ── Toggles ───────────────────────────────────────────────────────────────────
 ["autoSuggest","showTrigger","notifications","srEnabled","followUp"].forEach(id => {
@@ -245,6 +247,7 @@ function renderAll() {
   setRadio("replyTone",       settings.replyTone      || "auto");
   setRadio("followUpHours",   String(settings.followUpHours || 24));
   setRadio("shortenStrength", settings.shortenStrength || "medium");
+  setRadio("modelBackend",    settings.modelBackend   || "groq");
 
   // Sliders
   minLengthSlider.value    = settings.minLength   ?? 8;
