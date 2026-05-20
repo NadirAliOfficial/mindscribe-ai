@@ -175,18 +175,14 @@
       el.focus();
       document.execCommand("selectAll", false, null);
       document.execCommand("insertText", false, newText);
-      // Verify blank lines survived — execCommand collapses \n\n in some browsers
-      const got  = (el.innerText || "").replace(/\r\n/g, "\n").trimEnd();
-      const want = newText.replace(/\r\n/g, "\n").trimEnd();
-      if (got !== want) {
-        // Fallback: build HTML that preserves blank lines between paragraphs
-        const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-        el.innerHTML = want
-          .split(/\n\n+/)
-          .map(para => `<p>${para.split("\n").map(esc).join("<br>")}</p>`)
-          .join("") || "<p><br></p>";
-        el.dispatchEvent(new InputEvent("input", { bubbles: true }));
-      }
+
+      // Restore cursor to end so backspace works immediately
+      const sel = window.getSelection();
+      const endRange = document.createRange();
+      endRange.selectNodeContents(el);
+      endRange.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(endRange);
     } else {
       el.focus();
       el.select();
