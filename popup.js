@@ -62,9 +62,9 @@ document.querySelectorAll(".tab").forEach(tab => {
 function initRadioGroup(id, key) {
   const group = document.getElementById(id);
   if (!group) return;
-  group.querySelectorAll(".radio-btn").forEach(btn => {
+  group.querySelectorAll(".chip, .radio-btn").forEach(btn => {
     btn.addEventListener("click", () => {
-      group.querySelectorAll(".radio-btn").forEach(b => b.classList.remove("active"));
+      group.querySelectorAll(".chip, .radio-btn").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
       settings[key] = btn.dataset.val;
       scheduleSave();
@@ -143,16 +143,16 @@ function buildActionToggles() {
   container.innerHTML = "";
   ACTIONS.forEach(action => {
     const isEnabled = !settings.disabledActions.includes(action);
-    const row = document.createElement("div");
-    row.className = "row";
-    row.innerHTML = `
-      <div class="row-label">${ACTION_LABELS[action]}</div>
+    const item = document.createElement("div");
+    item.className = "action-item";
+    item.innerHTML = `
+      <span class="action-item-label">${ACTION_LABELS[action]}</span>
       <label class="toggle">
         <input type="checkbox" ${isEnabled ? "checked" : ""}>
         <div class="toggle-track"></div>
         <div class="toggle-thumb"></div>
       </label>`;
-    row.querySelector("input").addEventListener("change", (e) => {
+    item.querySelector("input").addEventListener("change", (e) => {
       if (e.target.checked) {
         settings.disabledActions = settings.disabledActions.filter(a => a !== action);
       } else {
@@ -160,7 +160,7 @@ function buildActionToggles() {
       }
       scheduleSave();
     });
-    container.appendChild(row);
+    container.appendChild(item);
   });
 }
 
@@ -190,8 +190,16 @@ document.getElementById("testBtn").addEventListener("click", async () => {
         body: JSON.stringify({ model: settings.modelSelect || "llama-3.3-70b-versatile", messages: [{ role: "user", content: "Hi" }], max_tokens: 5 }),
       });
       const status = document.getElementById("keyStatus" + (i + 1));
-      if (r.ok) { passed++; if (status) { status.textContent = "✓"; status.style.color = "#4ade80"; } }
-      else       { failed++; if (status) { status.textContent = r.status === 429 ? "Rate limited" : "✗ " + r.status; status.style.color = "#f87171"; } }
+      if (r.ok) {
+        passed++;
+        if (status) { status.textContent = "✓ OK"; status.className = "key-status ok"; }
+      } else {
+        failed++;
+        if (status) {
+          status.textContent = r.status === 429 ? "Rate limited" : "✗ " + r.status;
+          status.className = r.status === 429 ? "key-status warn" : "key-status err";
+        }
+      }
     } catch (_) { failed++; }
   }
 
@@ -238,7 +246,7 @@ function renderAll() {
   function setRadio(groupId, val) {
     const g = document.getElementById(groupId);
     if (!g) return;
-    g.querySelectorAll(".radio-btn").forEach(b => {
+    g.querySelectorAll(".chip, .radio-btn").forEach(b => {
       b.classList.toggle("active", b.dataset.val === String(val));
     });
   }
@@ -277,8 +285,12 @@ function renderAll() {
   const dot   = badge?.querySelector(".status-dot");
   const hasKey = (settings.apiKeys || []).some(k => k?.trim());
   if (!hasKey) {
-    if (label) label.textContent = "No API key";
-    if (dot)   dot.style.background = "#f87171";
-    if (badge) badge.style.background = "#3a1a1a", badge.style.borderColor = "#6e2a2a", badge.style.color = "#f87171";
+    if (label) label.textContent = "No Key";
+    if (dot)   dot.style.background = "#f87171", dot.style.boxShadow = "0 0 4px #f87171";
+    if (badge) {
+      badge.style.background    = "#1f0d0d";
+      badge.style.borderColor   = "#3f1a1a";
+      badge.style.color         = "#f87171";
+    }
   }
 }

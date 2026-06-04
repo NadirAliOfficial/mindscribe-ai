@@ -749,10 +749,8 @@
       const ratios = { light: 0.80, medium: 0.60, aggressive: 0.40 };
       const ratio  = ratios[CFG.shortenStrength] || 0.60;
       num_predict  = Math.max(60, Math.ceil(w * ratio * 1.4));
-    } else if (type === "proofread") {
-      num_predict = Math.max(80, Math.ceil(w * 1.2));
     } else {
-      num_predict = Math.max(80, Math.ceil(w * 1.5)); // rewrite/professional/friendly can be slightly longer
+      num_predict = -1; // unlimited — Groq omits max_tokens, Ollama generates until done
     }
 
     return { temperature: 0.3, num_predict, num_ctx, keep_alive: -1 };

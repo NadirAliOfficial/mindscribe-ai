@@ -62,7 +62,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         stream: false,
         options: {
           temperature: options.temperature ?? 0.3,
-          ...(options.num_predict > 0 ? { num_predict: options.num_predict } : {}),
+          ...(options.num_predict != null && options.num_predict !== 0 ? { num_predict: options.num_predict } : {}),
         },
       };
       try {
@@ -159,7 +159,7 @@ chrome.runtime.onConnect.addListener((port) => {
         stream: true,
         options: {
           temperature: options.temperature ?? 0.3,
-          ...(options.num_predict > 0 ? { num_predict: options.num_predict } : {}),
+          ...(options.num_predict != null && options.num_predict !== 0 ? { num_predict: options.num_predict } : {}),
         },
       };
       try {
