@@ -6,12 +6,22 @@
 
   const MODEL = "llama-3.3-70b-versatile";
 
+  const ICONS = {
+    rewrite:      `<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>`,
+    proofread:    `<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/></svg>`,
+    professional: `<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M6.5 1A1.5 1.5 0 0 0 5 2.5V3H1.5A1.5 1.5 0 0 0 0 4.5v1.384l7.614 2.03a1.5 1.5 0 0 0 .772 0L16 5.884V4.5A1.5 1.5 0 0 0 14.5 3H11v-.5A1.5 1.5 0 0 0 9.5 1h-3zm0 1h3a.5.5 0 0 1 .5.5V3H6v-.5a.5.5 0 0 1 .5-.5z"/><path d="M0 12.5A1.5 1.5 0 0 0 1.5 14h13a1.5 1.5 0 0 0 1.5-1.5V6.85L8.129 8.947a.5.5 0 0 1-.258 0L0 6.85v5.65z"/></svg>`,
+    shorten:      `<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M3.5 3.5c-.614-.884-.074-1.962.858-2.5L8 7.226 11.642 1c.932.538 1.472 1.616.858 2.5L8.81 8H16v2H8.002l.03.03 4.987 5.5H11.82l-3.82-4.221L4.18 15.53H2.833L7.82 10.03 8.002 10H0V8h7.19L3.5 3.5z"/></svg>`,
+    clean:        `<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8.086 2.207a2 2 0 0 1 2.828 0l3.879 3.879a2 2 0 0 1 0 2.828l-5.5 5.5A2 2 0 0 1 7.879 15H5.12a2 2 0 0 1-1.414-.586l-2.5-2.5a2 2 0 0 1 0-2.828l6.879-6.879zm.66 11.34L3.453 8.254 1.914 9.793a1 1 0 0 0 0 1.414l2.5 2.5a1 1 0 0 0 .707.293H7.88a1 1 0 0 0 .707-.293l.16-.16z"/></svg>`,
+    siteOn:       `<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M7 5H3a3 3 0 0 0 0 6h4a4.995 4.995 0 0 1-.584-1H3a2 2 0 1 1 0-4h3.416c.156-.357.352-.692.584-1z"/><path d="M16 8A5 5 0 1 1 6 8a5 5 0 0 1 10 0z"/></svg>`,
+    siteOff:      `<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M9 5H5a5 5 0 0 0 0 10h4a4.994 4.994 0 0 0 2.584-1H5a4 4 0 1 1 0-8h6.584A4.992 4.992 0 0 0 9 5z"/></svg>`,
+  };
+
   const ACTIONS = [
-    { label: "Rewrite",      type: "rewrite",      icon: "🔄" },
-    { label: "Proofread",    type: "proofread",    icon: "✅" },
-    { label: "Professional", type: "professional", icon: "💼" },
-    { label: "Shorten",      type: "shorten",      icon: "✂️" },
-    { label: "Clean",        type: "clean",        icon: "🧹" },
+    { label: "Rewrite",      type: "rewrite",      icon: ICONS.rewrite,      desc: "Rephrase with different wording, same meaning" },
+    { label: "Proofread",    type: "proofread",    icon: ICONS.proofread,    desc: "Fix grammar, spelling and punctuation" },
+    { label: "Professional", type: "professional", icon: ICONS.professional, desc: "Rewrite in formal business tone" },
+    { label: "Shorten",      type: "shorten",      icon: ICONS.shorten,      desc: "Cut filler words, keep every point" },
+    { label: "Clean",        type: "clean",        icon: ICONS.clean,        desc: "Remove formatting noise and extra spaces" },
   ];
 
   const SHOTS = {
@@ -209,13 +219,14 @@
     toolbar = document.createElement("div");
     toolbar.id = "te-toolbar";
 
-    ACTIONS.forEach(({ label, type, icon }) => {
+    ACTIONS.forEach(({ label, type, icon, desc }) => {
       const btn = document.createElement("button");
       btn.className = "te-action-btn";
       btn.dataset.type = type;
+      btn.title = desc || label;
       const iconEl = document.createElement("span");
       iconEl.className = "te-btn-icon";
-      iconEl.textContent = icon;
+      iconEl.innerHTML = icon;
       const labelEl = document.createElement("span");
       labelEl.textContent = label;
       btn.appendChild(iconEl);
@@ -230,7 +241,7 @@
 
     // Per-site auto-suggest toggle
     const sep = document.createElement("div");
-    sep.style.cssText = "width:1px;height:18px;background:#3a3a3a;margin:0 2px;flex-shrink:0;";
+    sep.style.cssText = "width:1px;height:16px;background:rgba(255,255,255,0.07);margin:0 2px;flex-shrink:0;";
     toolbar.appendChild(sep);
 
     const siteToggle = document.createElement("button");
@@ -239,12 +250,12 @@
     siteToggle.style.padding = "5px 8px";
     function updateSiteToggle() {
       siteToggle.innerHTML = siteDisabled
-        ? '<span class="te-btn-icon" style="opacity:0.5">⊘</span>'
-        : '<span class="te-btn-icon">✨</span>';
+        ? `<span class="te-btn-icon">${ICONS.siteOff}</span>`
+        : `<span class="te-btn-icon">${ICONS.siteOn}</span>`;
       siteToggle.title = siteDisabled
         ? "Auto-suggest off for this site — click to enable"
         : "Auto-suggest on — click to disable for this site";
-      siteToggle.style.opacity = siteDisabled ? "0.5" : "1";
+      siteToggle.style.opacity = siteDisabled ? "0.45" : "1";
     }
     updateSiteToggle();
     siteToggle.addEventListener("mousedown", (e) => {
@@ -316,13 +327,15 @@
     srBtn.textContent = "💬";
     srBtn.style.cssText = `
       position:fixed;z-index:2147483647;display:none;
-      width:30px;height:30px;align-items:center;justify-content:center;
-      background:#1e1e1e;color:#fff;font-size:15px;border-radius:50%;
-      cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,0.35);
-      user-select:none;border:1px solid #444;transition:background 0.15s;
+      width:32px;height:32px;align-items:center;justify-content:center;
+      background:rgba(13,13,13,0.97);color:#fff;font-size:15px;border-radius:50%;
+      cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,0.5),inset 0 1px 0 rgba(255,255,255,0.06);
+      user-select:none;border:1px solid rgba(255,255,255,0.1);
+      transition:background 0.15s,transform 0.1s,box-shadow 0.15s;
+      backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
     `;
-    srBtn.addEventListener("mouseenter", () => { if (!awayMode) srBtn.style.background = "#2d2d2d"; });
-    srBtn.addEventListener("mouseleave", () => { if (!awayMode) srBtn.style.background = "#1e1e1e"; });
+    srBtn.addEventListener("mouseenter", () => { if (!awayMode) { srBtn.style.background = "rgba(108,71,255,0.2)"; srBtn.style.borderColor = "rgba(108,71,255,0.4)"; srBtn.style.transform = "scale(1.1)"; } });
+    srBtn.addEventListener("mouseleave", () => { if (!awayMode) { srBtn.style.background = "rgba(13,13,13,0.97)"; srBtn.style.borderColor = "rgba(255,255,255,0.1)"; srBtn.style.transform = ""; } });
     srBtn.addEventListener("mousedown", (e) => { e.preventDefault(); e.stopPropagation(); });
     srBtn.addEventListener("click", (e) => {
       e.preventDefault(); e.stopPropagation();
@@ -466,23 +479,44 @@
     if (srBtn)   srBtn.style.display   = "none";
   }
 
-  // ── Suggestion bar ────────────────────────────────────────────────────────
+  // ── Suggestion card ───────────────────────────────────────────────────────
 
   function getSuggest() {
     if (suggest) return suggest;
     suggest = document.createElement("div");
     suggest.id = "te-suggest";
 
+    // Header row: action label + dismiss
+    const header = document.createElement("div");
+    header.className = "te-sug-hd";
+
     const label = document.createElement("span");
     label.id = "te-suggest-label";
     label.textContent = "✨";
 
-    const textEl = document.createElement("span");
+    const dismiss = document.createElement("button");
+    dismiss.id = "te-suggest-dismiss";
+    dismiss.textContent = "✕";
+    dismiss.addEventListener("mousedown", (e) => { e.preventDefault(); e.stopPropagation(); hideSuggest(); });
+
+    header.appendChild(label);
+    header.appendChild(dismiss);
+
+    // Body: full scrollable suggestion text
+    const body = document.createElement("div");
+    body.className = "te-sug-bd";
+
+    const textEl = document.createElement("div");
     textEl.id = "te-suggest-text";
+    body.appendChild(textEl);
+
+    // Footer: accept button
+    const footer = document.createElement("div");
+    footer.className = "te-sug-ft";
 
     const accept = document.createElement("button");
     accept.id = "te-suggest-accept";
-    accept.textContent = "Accept (Tab)";
+    accept.textContent = "Accept  Tab ↹";
     accept.addEventListener("mousedown", (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -501,21 +535,27 @@
       }
     });
 
-    const dismiss = document.createElement("button");
-    dismiss.id = "te-suggest-dismiss";
-    dismiss.textContent = "✕";
-    dismiss.addEventListener("mousedown", (e) => { e.preventDefault(); e.stopPropagation(); hideSuggest(); });
-
-    suggest.appendChild(label);
-    suggest.appendChild(textEl);
-    suggest.appendChild(accept);
-    suggest.appendChild(dismiss);
+    footer.appendChild(accept);
+    suggest.appendChild(header);
+    suggest.appendChild(body);
+    suggest.appendChild(footer);
     document.documentElement.appendChild(suggest);
 
-    // ── Drag to reposition ──────────────────────────────────────────────────
+    // Restore saved position
+    try {
+      chrome.storage.local.get("te_suggest_pos", (r) => {
+        if (r.te_suggest_pos?.left) {
+          suggest.style.left = r.te_suggest_pos.left;
+          suggest.style.top  = r.te_suggest_pos.top;
+          suggestDragged     = true;
+        }
+      });
+    } catch (_) {}
+
+    // Drag to reposition
     let drag = null;
     suggest.addEventListener("mousedown", (e) => {
-      if (e.target.tagName === "BUTTON") return; // don't drag when clicking buttons
+      if (e.target.tagName === "BUTTON") return;
       e.preventDefault();
       const r = suggest.getBoundingClientRect();
       drag = { ox: e.clientX - r.left, oy: e.clientY - r.top };
@@ -530,39 +570,52 @@
       suggest.style.top  = y + "px";
     });
     document.addEventListener("mouseup", () => {
-      if (drag) { drag = null; suggest.style.cursor = ""; }
+      if (!drag) return;
+      drag = null;
+      suggest.style.cursor = "";
+      if (suggestDragged) {
+        try {
+          chrome.storage.local.set({ te_suggest_pos: { left: suggest.style.left, top: suggest.style.top } });
+        } catch (_) {}
+      }
     });
 
     return suggest;
   }
 
+  function _suggestWidth(el) {
+    const r = el.getBoundingClientRect();
+    const w = Math.min(400, Math.max(260, r.width));
+    return Math.min(w, window.innerWidth - Math.max(8, r.left) - 12);
+  }
+
   function positionSuggest(el) {
     if (!suggest || suggest.style.display === "none" || suggestDragged) return;
     const r = el.getBoundingClientRect();
-    suggest.style.top      = (r.bottom + 6) + "px";
-    suggest.style.left     = Math.max(8, r.left) + "px";
-    suggest.style.maxWidth = Math.min(520, window.innerWidth - Math.max(8, r.left) - 12) + "px";
+    suggest.style.top   = (r.bottom + 6) + "px";
+    suggest.style.left  = Math.max(8, r.left) + "px";
+    suggest.style.width = _suggestWidth(el) + "px";
   }
 
   const ACTION_LABELS = { proofread: "Proofread", shorten: "Shorten", rewrite: "Rewrite", professional: "Professional", clean: "Clean" };
 
   function showSuggestLoading(el, action) {
-    suggestFor    = el;
-    suggestDragged = false; // reset drag so bar re-anchors below the input
+    suggestFor = el;
     const s = getSuggest();
+    s.dataset.state     = "loading";
     s.style.borderColor = "";
-    s.querySelector("#te-suggest-label").textContent = "✨ " + (ACTION_LABELS[action] || "");
+    s.querySelector("#te-suggest-label").textContent = (ACTION_LABELS[action] || "Suggest");
     s.querySelector("#te-suggest-text").textContent  = "Analyzing…";
     const accept = s.querySelector("#te-suggest-accept");
-    accept.textContent       = "Accept (Tab)";
-    accept.style.background  = "";
-    accept.style.display     = "none";
-    s.querySelector("#te-suggest-dismiss").textContent = "✕";
-    const r = el.getBoundingClientRect();
-    s.style.top      = (r.bottom + 6) + "px";
-    s.style.left     = Math.max(8, r.left) + "px";
-    s.style.maxWidth = Math.min(520, window.innerWidth - Math.max(8, r.left) - 12) + "px";
-    s.style.display  = "flex";
+    accept.textContent = "Accept  Tab ↹";
+    accept.classList.remove("undo");
+    if (!suggestDragged) {
+      const r = el.getBoundingClientRect();
+      s.style.top   = (r.bottom + 6) + "px";
+      s.style.left  = Math.max(8, r.left) + "px";
+      s.style.width = _suggestWidth(el) + "px";
+    }
+    s.style.display = "flex";
   }
 
   function escHtml(s) {
@@ -579,24 +632,24 @@
   function showSuggestResult(text) {
     if (!suggest || suggest.style.display === "none") return;
     suggestText = text;
+    suggest.dataset.state = "ready";
     const textEl = suggest.querySelector("#te-suggest-text");
     if (originalForDiff && text.length > 5) {
       textEl.innerHTML = wordDiffHtml(originalForDiff, text);
     } else {
       textEl.textContent = text;
     }
-    suggest.querySelector("#te-suggest-accept").style.display = "";
   }
 
   function hideSuggest() {
     streamPort?.disconnect();
     streamPort       = null;
-    suggestDragged   = false;
-    lastSuggestInput = ""; // reset so same text can re-trigger after dismiss
+    lastSuggestInput = "";
     if (suggest) {
       suggest.style.display = "none";
+      delete suggest.dataset.state;
       const accept = suggest.querySelector("#te-suggest-accept");
-      if (accept) { accept.classList.remove("undo"); accept.style.background = ""; }
+      if (accept) { accept.classList.remove("undo"); }
     }
     suggestFor  = null;
     suggestText = "";
@@ -605,24 +658,23 @@
 
   function updateUndoBtn(accept) {
     const levels = undoStack.length;
-    accept.textContent      = levels > 1 ? `Undo (${levels})` : "Undo";
-    accept.style.background = "#333";
+    accept.textContent = levels > 1 ? `Undo  (${levels})` : "Undo";
     accept.classList.add("undo");
-    accept.style.display    = "";
   }
 
   function showUndoState(el, original) {
     const s = getSuggest();
-    s.style.borderColor = "#22c55e";
-    s.querySelector("#te-suggest-label").textContent = "✓";
-    s.querySelector("#te-suggest-text").textContent  = "Applied";
+    s.dataset.state     = "applied";
+    s.style.borderColor = "";
+    s.querySelector("#te-suggest-label").textContent = "✓ Applied";
+    s.querySelector("#te-suggest-text").textContent  = "Suggestion applied. Click Undo to revert.";
     const accept = s.querySelector("#te-suggest-accept");
     updateUndoBtn(accept);
-    s.querySelector("#te-suggest-dismiss").textContent = "✕";
     if (!suggestDragged) {
       const r = el.getBoundingClientRect();
-      s.style.top  = (r.bottom + 6) + "px";
-      s.style.left = Math.max(8, r.left) + "px";
+      s.style.top   = (r.bottom + 6) + "px";
+      s.style.left  = Math.max(8, r.left) + "px";
+      s.style.width = _suggestWidth(el) + "px";
     }
     s.style.display = "flex";
     setTimeout(() => { if (!undoStack.length) hideSuggest(); }, 5000);
@@ -662,7 +714,7 @@
       btn.innerHTML = "";
       const iconEl = document.createElement("span");
       iconEl.className = "te-btn-icon";
-      iconEl.textContent = icon;
+      iconEl.innerHTML = icon;
       const labelEl = document.createElement("span");
       labelEl.textContent = label;
       btn.appendChild(iconEl);
@@ -839,6 +891,20 @@
 
     // 7. Repeated word back-to-back ("the the", "I I")
     if (/\b(\w+)\s+\1\b/i.test(text)) score++;
+
+    // 8. Mid-sentence uppercase after a short all-lowercase word
+    //    "im Is play" → "im" (2 chars, all lowercase) then "Is" (capitalized) = broken caps/autocorrect
+    //    Skips when prev word starts with uppercase ("Hi John" is fine — "Hi" starts with uppercase)
+    for (let i = 1; i < words.length; i++) {
+      const prev = words[i - 1].replace(/[^a-zA-Z]/g, "");
+      if (prev.length >= 1 && prev.length <= 3 && /^[a-z]+$/.test(prev) && /^[A-Z]/.test(words[i])) {
+        score++;
+        break;
+      }
+    }
+
+    // 9. Common words typed without apostrophe or capitalisation ("im", "dont", "cant", "wont", "youre", "ive", "id", "thats")
+    if (/\b(im|dont|cant|wont|youre|ive|id|thats|its|hes|shes|theyre|were|whats|theres|hows|lets)\b/.test(text.toLowerCase())) score++;
 
     return score;
   }

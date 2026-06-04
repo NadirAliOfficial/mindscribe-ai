@@ -1,3 +1,5 @@
+/* ── Toolbar ─────────────────────────────────────────────────────────────── */
+
 #te-toolbar {
   position: fixed;
   z-index: 2147483647;
@@ -6,12 +8,15 @@
   align-items: center;
   gap: 4px;
   padding: 5px 6px;
-  background: #1e1e1e;
-  border: 1px solid #333;
-  border-radius: 10px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.45);
+  background: #0d0d0d;
+  border: 1px solid rgba(108, 71, 255, 0.28);
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 1px rgba(108, 71, 255, 0.07),
+    0 16px 48px rgba(0, 0, 0, 0.75),
+    0 4px 14px rgba(0, 0, 0, 0.5);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  animation: te-fadein 0.15s ease;
+  animation: te-fadein 0.18s cubic-bezier(0.16,1,0.3,1);
   cursor: grab;
   user-select: none;
 }
@@ -20,120 +25,184 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 5px 11px;
+  padding: 6px 12px;
   font-size: 12px;
   font-weight: 500;
-  color: #d4d4d4;
-  background: #272727;
-  border: 1px solid #3a3a3a;
-  border-radius: 7px;
+  color: #aaa;
+  background: #181818;
+  border: 1px solid #282828;
+  border-radius: 9px;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.1s, color 0.1s, border-color 0.1s;
-  line-height: 1.4;
+  transition: background 0.13s, color 0.13s, border-color 0.13s, box-shadow 0.13s, transform 0.1s;
+  line-height: 1;
   font-family: inherit;
 }
 
-.te-action-btn:hover   { background: #333; color: #fff; border-color: #555; }
-.te-action-btn:active  { background: #3d3d3d; }
-.te-action-btn:disabled { opacity: 0.35; pointer-events: none; }
-
-.te-btn-icon {
-  font-size: 13px;
-  flex-shrink: 0;
+.te-action-btn:hover {
+  background: #1a3d2b;
+  border-color: #2a6e47;
+  color: #4ade80;
+  box-shadow: 0 3px 14px rgba(74, 222, 128, 0.2);
+  transform: translateY(-1px);
 }
 
-/* ── Auto-suggest bar ────────────────────────────────────────────────────── */
+.te-action-btn:active  { transform: scale(0.96) translateY(0); box-shadow: none; }
+.te-action-btn:disabled { opacity: 0.25; pointer-events: none; }
+
+.te-btn-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  line-height: 1;
+}
+.te-btn-icon svg { display: block; }
+
+/* ── Suggestion card ─────────────────────────────────────────────────────── */
 
 #te-suggest {
   position: fixed;
   z-index: 2147483647;
   display: none;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: #1e1e1e;
-  border: 1px solid #0a66c2;
-  border-radius: 10px;
-  box-shadow: 0 4px 18px rgba(0,0,0,0.45);
+  flex-direction: column;
+  background: #111;
+  border: 1px solid #2a2a2a;
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.7), 0 4px 14px rgba(0,0,0,0.45);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  animation: te-fadein 0.18s ease;
-  cursor: grab;
+  animation: te-fadein 0.18s cubic-bezier(0.16,1,0.3,1);
+  overflow: hidden;
   user-select: none;
+  cursor: default;
+  min-width: 260px;
+}
+
+/* ── Card header ── */
+.te-sug-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px 8px;
+  border-bottom: 1px solid #1e1e1e;
+  background: #0e0e0e;
+  cursor: grab;
 }
 
 #te-suggest-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: #7ab3e0;
-  flex-shrink: 0;
-  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 700;
+  color: #7a5cff;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
 }
+
+#te-suggest-dismiss {
+  background: none;
+  border: none;
+  color: #3a3a3a;
+  cursor: pointer;
+  font-size: 13px;
+  width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 5px;
+  transition: color 0.1s, background 0.1s;
+  flex-shrink: 0;
+  line-height: 1;
+}
+#te-suggest-dismiss:hover { color: #bbb; background: rgba(255,255,255,0.07); }
+
+/* ── Card body ── */
+.te-sug-bd {
+  padding: 10px 12px;
+  min-height: 38px;
+  max-height: 150px;
+  overflow-y: auto;
+  cursor: grab;
+}
+
+.te-sug-bd::-webkit-scrollbar { width: 4px; }
+.te-sug-bd::-webkit-scrollbar-track { background: transparent; }
+.te-sug-bd::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 4px; }
 
 #te-suggest-text {
-  flex: 1;
   font-size: 13px;
-  color: #d4d4d4;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
+  color: #d0d0d0;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
+/* Loading state */
+#te-suggest[data-state="loading"] #te-suggest-text {
+  color: #4a4a4a;
+  font-style: italic;
+}
+
+/* Applied state */
+#te-suggest[data-state="applied"] #te-suggest-label { color: #4ade80; }
+#te-suggest[data-state="applied"] #te-suggest-text  { color: #555; font-style: italic; font-size: 12px; }
+
+/* ── Card footer ── */
+.te-sug-ft {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 8px 12px;
+  border-top: 1px solid #1a1a1a;
+  background: #0e0e0e;
+  gap: 6px;
+}
+
+/* Hide footer while loading — no button to show yet */
+#te-suggest[data-state="loading"] .te-sug-ft { display: none; }
+
 #te-suggest-accept {
-  padding: 5px 12px;
+  padding: 6px 18px;
   font-size: 12px;
   font-weight: 600;
-  background: #0a66c2;
+  background: linear-gradient(135deg, #6c47ff, #4d30cc);
   color: #fff;
   border: none;
   border-radius: 7px;
   cursor: pointer;
   white-space: nowrap;
-  flex-shrink: 0;
-  transition: background 0.1s;
+  transition: opacity 0.12s, transform 0.1s;
+  box-shadow: 0 2px 10px rgba(108,71,255,0.4);
+  letter-spacing: 0.1px;
+  font-family: inherit;
 }
 
-#te-suggest-accept,
-#te-suggest-dismiss { cursor: pointer; }
-#te-suggest-accept:hover { background: #004182; }
-#te-suggest-accept.undo  { background: #333; }
-#te-suggest-accept.undo:hover { background: #444; }
+#te-suggest-accept:hover  { opacity: 0.85; transform: translateY(-1px); }
+#te-suggest-accept:active { opacity: 1; transform: scale(0.97); }
 
-#te-suggest-dismiss {
-  padding: 3px 7px;
-  font-size: 14px;
-  background: transparent;
-  color: #666;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: color 0.1s;
-  line-height: 1;
+#te-suggest-accept.undo {
+  background: #1e1e1e;
+  border: 1px solid #333;
+  color: #ccc;
+  box-shadow: none;
 }
-
-#te-suggest-dismiss:hover { color: #ccc; }
-
-@keyframes te-fadein {
-  from { opacity: 0; transform: translateY(5px); }
-  to   { opacity: 1; transform: translateY(0);   }
-}
+#te-suggest-accept.undo:hover { background: #262626; color: #eee; transform: none; }
 
 /* ── Diff highlight ──────────────────────────────────────────────────────── */
 
 #te-suggest-text mark {
-  background: rgba(10, 102, 194, 0.18);
-  color: #7ab3e0;
-  border-radius: 2px;
-  padding: 0 1px;
+  background: rgba(108, 71, 255, 0.2);
+  color: #b09fff;
+  border-radius: 3px;
+  padding: 0 2px;
   font-weight: 500;
+  font-style: normal;
 }
 
-/* ── New message pulse ───────────────────────────────────────────────────── */
+/* ── Animations ──────────────────────────────────────────────────────────── */
+
+@keyframes te-fadein {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0)   scale(1);    }
+}
 
 @keyframes te-pulse {
   0%   { transform: scale(1);    box-shadow: 0 0 0 0 rgba(26,110,60,0.7); }
-  50%  { transform: scale(1.25); box-shadow: 0 0 0 8px rgba(26,110,60,0);  }
+  50%  { transform: scale(1.25); box-shadow: 0 0 0 8px rgba(26,110,60,0); }
   100% { transform: scale(1);    box-shadow: 0 0 0 0 rgba(26,110,60,0);   }
 }
