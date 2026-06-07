@@ -103,13 +103,13 @@ tempSlider.addEventListener("input", () => {
 });
 
 // ── Selects & text inputs ─────────────────────────────────────────────────────
-document.getElementById("translateTarget").addEventListener("change", (e) => {
+document.getElementById("translateTarget")?.addEventListener("change", (e) => {
   settings.translateTarget = e.target.value; scheduleSave();
 });
-document.getElementById("modelSelect").addEventListener("change", (e) => {
+document.getElementById("modelSelect")?.addEventListener("change", (e) => {
   settings.modelSelect = e.target.value; scheduleSave();
 });
-document.getElementById("customDefault").addEventListener("input", (e) => {
+document.getElementById("customDefault")?.addEventListener("input", (e) => {
   settings.customDefault = e.target.value; scheduleSave();
 });
 // ── 3 API key slots ───────────────────────────────────────────────────────────
@@ -264,11 +264,14 @@ function renderAll() {
   tempVal.textContent      = ((settings.temperature ?? 3) / 10).toFixed(1);
 
   // Selects
-  document.getElementById("translateTarget").value = settings.translateTarget || "auto";
-  document.getElementById("modelSelect").value     = settings.modelSelect || "llama-3.3-70b-versatile";
+  const ttEl = document.getElementById("translateTarget");
+  if (ttEl) ttEl.value = settings.translateTarget || "auto";
+  const msEl = document.getElementById("modelSelect");
+  if (msEl) msEl.value = settings.modelSelect || "llama-3.3-70b-versatile";
 
   // Text inputs
-  document.getElementById("customDefault").value = settings.customDefault || DEFAULTS.customDefault;
+  const cdEl = document.getElementById("customDefault");
+  if (cdEl) cdEl.value = settings.customDefault || DEFAULTS.customDefault;
 
   // API key slots — load from te_api_keys array
   const keys = settings.apiKeys || [];
