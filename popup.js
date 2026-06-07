@@ -54,7 +54,7 @@ document.querySelectorAll(".tab").forEach(tab => {
     document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
     document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
     tab.classList.add("active");
-    document.getElementById("tab-" + tab.dataset.tab).classList.add("active");
+    document.getElementById("tab-" + tab.dataset.tab)?.classList.add("active");
   });
 });
 
@@ -88,17 +88,17 @@ initRadioGroup("modelBackend",    "modelBackend");
 // ── Sliders ───────────────────────────────────────────────────────────────────
 const minLengthSlider = document.getElementById("minLength");
 const minLengthVal    = document.getElementById("minLengthVal");
-minLengthSlider.addEventListener("input", () => {
+minLengthSlider?.addEventListener("input", () => {
   settings.minLength = parseInt(minLengthSlider.value);
-  minLengthVal.textContent = minLengthSlider.value;
+  if (minLengthVal) minLengthVal.textContent = minLengthSlider.value;
   scheduleSave();
 });
 
 const tempSlider = document.getElementById("temperature");
 const tempVal    = document.getElementById("temperatureVal");
-tempSlider.addEventListener("input", () => {
+tempSlider?.addEventListener("input", () => {
   settings.temperature = parseInt(tempSlider.value);
-  tempVal.textContent = (parseInt(tempSlider.value) / 10).toFixed(1);
+  if (tempVal) tempVal.textContent = (parseInt(tempSlider.value) / 10).toFixed(1);
   scheduleSave();
 });
 
@@ -112,18 +112,19 @@ document.getElementById("modelSelect")?.addEventListener("change", (e) => {
 document.getElementById("customDefault")?.addEventListener("input", (e) => {
   settings.customDefault = e.target.value; scheduleSave();
 });
+
 // ── 3 API key slots ───────────────────────────────────────────────────────────
 function saveKeys() {
-  const keys = [
-    document.getElementById("apiKey1").value.trim(),
-    document.getElementById("apiKey2").value.trim(),
-    document.getElementById("apiKey3").value.trim(),
-  ].filter(Boolean);
+  const keys = ["apiKey1","apiKey2","apiKey3"]
+    .map(id => document.getElementById(id)?.value.trim() || "")
+    .filter(Boolean);
   chrome.storage.local.set({ te_api_keys: keys }, () => showToast("✓ Keys saved"));
 }
 
 ["apiKey1","apiKey2","apiKey3"].forEach(id => {
-  document.getElementById(id).addEventListener("input", () => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener("input", () => {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(saveKeys, 600);
   });
@@ -140,6 +141,7 @@ document.querySelectorAll(".eye-btn").forEach(btn => {
 // ── Action toggles ────────────────────────────────────────────────────────────
 function buildActionToggles() {
   const container = document.getElementById("actionToggles");
+  if (!container) return;
   container.innerHTML = "";
   ACTIONS.forEach(action => {
     const isEnabled = !settings.disabledActions.includes(action);
@@ -165,15 +167,13 @@ function buildActionToggles() {
 }
 
 // ── Test API ──────────────────────────────────────────────────────────────────
-document.getElementById("testBtn").addEventListener("click", async () => {
+document.getElementById("testBtn")?.addEventListener("click", async () => {
   const btn = document.getElementById("testBtn");
   btn.textContent = "Testing…"; btn.disabled = true;
 
-  const keys = [
-    document.getElementById("apiKey1").value.trim(),
-    document.getElementById("apiKey2").value.trim(),
-    document.getElementById("apiKey3").value.trim(),
-  ].filter(Boolean);
+  const keys = ["apiKey1","apiKey2","apiKey3"]
+    .map(id => document.getElementById(id)?.value.trim() || "")
+    .filter(Boolean);
 
   if (!keys.length) {
     btn.textContent = "✗ Add a key first"; btn.style.color = "#f87171";
@@ -213,7 +213,6 @@ document.querySelectorAll(".save-btn").forEach(btn => btn.remove());
 
 // ── Toast + status badge ──────────────────────────────────────────────────────
 function showToast(msg) {
-  // Brief flash on the header badge
   const badge  = document.getElementById("statusBadge");
   const label  = document.getElementById("statusText");
   const dot    = badge?.querySelector(".status-dot");
@@ -226,8 +225,8 @@ function showToast(msg) {
       if (dot) dot.style.background = "";
     }, 1500);
   }
-  // Also flash the bottom toast
   const t = document.getElementById("toast");
+  if (!t) return;
   t.textContent = msg;
   t.classList.add("show");
   clearTimeout(t._timer);
@@ -258,10 +257,10 @@ function renderAll() {
   setRadio("modelBackend",    settings.modelBackend   || "groq");
 
   // Sliders
-  minLengthSlider.value    = settings.minLength   ?? 8;
-  minLengthVal.textContent = settings.minLength   ?? 8;
-  tempSlider.value         = settings.temperature ?? 3;
-  tempVal.textContent      = ((settings.temperature ?? 3) / 10).toFixed(1);
+  if (minLengthSlider) minLengthSlider.value = settings.minLength ?? 8;
+  if (minLengthVal)    minLengthVal.textContent = settings.minLength ?? 8;
+  if (tempSlider) tempSlider.value = settings.temperature ?? 3;
+  if (tempVal)    tempVal.textContent = ((settings.temperature ?? 3) / 10).toFixed(1);
 
   // Selects
   const ttEl = document.getElementById("translateTarget");
@@ -273,10 +272,11 @@ function renderAll() {
   const cdEl = document.getElementById("customDefault");
   if (cdEl) cdEl.value = settings.customDefault || DEFAULTS.customDefault;
 
-  // API key slots — load from te_api_keys array
+  // API key slots
   const keys = settings.apiKeys || [];
   ["apiKey1","apiKey2","apiKey3"].forEach((id, i) => {
-    document.getElementById(id).value = keys[i] || "";
+    const el = document.getElementById(id);
+    if (el) el.value = keys[i] || "";
   });
 
   // Action toggles
