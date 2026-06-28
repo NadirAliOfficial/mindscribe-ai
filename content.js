@@ -1037,7 +1037,44 @@
         const cRect = container.getBoundingClientRect();
         const midX  = cRect.left + cRect.width / 2;
 
+        // Detect logged-in user's first name from nav (used for sender comparison)
+        const myFullName = (
+          document.querySelector(
+            ".global-nav__me-menu .t-16, .profile-rail-card__actor-link, " +
+            "[data-control-name='nav.settings_view_profile'] .t-16"
+          )?.innerText?.trim() || ""
+        ).toLowerCase().split("\n")[0];
+        const myFirstName = myFullName.split(/\s+/)[0]; // just first name for matching
+
+        let currentRole = "them"; // persists across consecutive messages from same sender
+
         container.querySelectorAll(".msg-s-message-list__event").forEach(group => {
+          // 1. Class-based: check for --outgoing / --right modifier on any descendant
+          const hasOutgoing = !!group.querySelector(
+            "[class*='--outgoing'], [class*='--right'], [class*='outgoing']"
+          );
+
+          // 2. Sender name: only present on first message of each sender group
+          const senderName = (
+            group.querySelector(
+              ".msg-s-event-listitem__name, [class*='event-listitem__name'], " +
+              "[class*='senderName'], [class*='sender-name']"
+            )?.innerText?.trim() || ""
+          ).toLowerCase();
+
+          if (hasOutgoing) {
+            currentRole = "me";
+          } else if (senderName) {
+            // "you" label or name matches our detected profile name
+            if (senderName === "you" || (myFirstName && senderName.startsWith(myFirstName))) {
+              currentRole = "me";
+            } else {
+              currentRole = "them";
+            }
+          }
+          // else: no new sender info → keep currentRole (continuation of same sender block)
+
+          // 3. Position-based on the deepest bubble element as final fallback
           const bodyEl = group.querySelector(
             ".msg-s-event-listitem__body, .msg-s-message-list__event-body, " +
             "[class*='event-listitem__body'], [class*='eventListItem__body']"
@@ -1045,18 +1082,16 @@
           const text = bodyEl?.innerText?.trim();
           if (!text || text.length < 2) return;
 
-          // Class-based detection (works if LinkedIn still applies these modifiers)
-          const hasOutgoingClass = !!group.querySelector("[class*='--outgoing'], [class*='--right']");
-
-          let isMe = hasOutgoingClass;
-          if (!isMe && bodyEl) {
-            // Position-based fallback: LinkedIn right-aligns your own message bubbles,
-            // so the body element's center will be past the container's midpoint.
-            const bRect = bodyEl.getBoundingClientRect();
-            if (bRect.width > 10) isMe = (bRect.left + bRect.width / 2) > midX;
+          if (!hasOutgoing && !senderName) {
+            // Measure the actual bubble (<p> or first child) not the full-width wrapper
+            const bubbleEl = bodyEl.querySelector("p, [class*='message-bubble'], [class*='messageBubble']") || bodyEl;
+            const bRect = bubbleEl.getBoundingClientRect();
+            if (bRect.width > 10 && bRect.width < cRect.width * 0.85) {
+              currentRole = (bRect.left + bRect.width / 2) > midX ? "me" : "them";
+            }
           }
 
-          msgs.push({ role: isMe ? "me" : "them", content: text });
+          msgs.push({ role: currentRole, content: text });
         });
 
         if (msgs.length) return msgs.slice(-30);
