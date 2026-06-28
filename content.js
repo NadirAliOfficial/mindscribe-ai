@@ -122,7 +122,40 @@
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   function isChatSite() {
-    return window.location.hostname.includes("fiverr.com");
+    const host = window.location.hostname;
+    const path = window.location.pathname;
+
+    // Fiverr — inbox/conversation pages only
+    if (host.includes("fiverr.com"))
+      return /\/(inbox|conversation|messaging)(\/|$)/i.test(path);
+
+    // WhatsApp Web — entire site is the messaging UI
+    if (host === "web.whatsapp.com") return true;
+
+    // LinkedIn — messaging section only
+    if (host.includes("linkedin.com"))
+      return /^\/(messaging|msg)(\/|$)/i.test(path);
+
+    // Telegram Web — entire site is the messaging UI
+    if (host === "web.telegram.org" || host === "k.telegram.org" || host === "z.telegram.org")
+      return true;
+
+    // Messenger — individual thread pages only
+    if (host.includes("messenger.com"))
+      return /^\/t\//i.test(path);
+
+    // Instagram — direct messages only
+    if (host.includes("instagram.com"))
+      return /^\/direct\//i.test(path);
+
+    // Discord — channel or DM pages only
+    if (host.includes("discord.com"))
+      return /^\/(channels|@me)(\/|$)/i.test(path);
+
+    // Slack — main app interface
+    if (host.includes("app.slack.com")) return true;
+
+    return false;
   }
 
   // Walk up to the topmost contenteditable ancestor.
@@ -1001,14 +1034,78 @@
         ".msg-s-message-list-container, .msg-overlay-conversation-bubble__content-wrapper"
       );
       if (container) {
-        container.querySelectorAll(".msg-s-message-list__event").forEach(el => {
-          const isMe = !!el.querySelector(".msg-s-event-listitem--outgoing, .msg-s-message-list__event--right");
-          const text = el.querySelector(".msg-s-event-listitem__body, .msg-s-message-list__event-body")?.innerText?.trim();
-          if (text) msgs.push({ role: isMe ? "me" : "them", content: text });
+        const cRect = container.getBoundingClientRect();
+        const midX  = cRect.left + cRect.width / 2;
+
+        container.querySelectorAll(".msg-s-message-list__event").forEach(group => {
+          const bodyEl = group.querySelector(
+            ".msg-s-event-listitem__body, .msg-s-message-list__event-body, " +
+            "[class*='event-listitem__body'], [class*='eventListItem__body']"
+          );
+          const text = bodyEl?.innerText?.trim();
+          if (!text || text.length < 2) return;
+
+          // Class-based detection (works if LinkedIn still applies these modifiers)
+          const hasOutgoingClass = !!group.querySelector("[class*='--outgoing'], [class*='--right']");
+
+          let isMe = hasOutgoingClass;
+          if (!isMe && bodyEl) {
+            // Position-based fallback: LinkedIn right-aligns your own message bubbles,
+            // so the body element's center will be past the container's midpoint.
+            const bRect = bodyEl.getBoundingClientRect();
+            if (bRect.width > 10) isMe = (bRect.left + bRect.width / 2) > midX;
+          }
+
+          msgs.push({ role: isMe ? "me" : "them", content: text });
         });
-        return msgs.slice(-30);
+
+        if (msgs.length) return msgs.slice(-30);
       }
     }
+
+    // ── Telegram Web ──────────────────────────────────────────────────────
+    if (host === "web.telegram.org" || host === "k.telegram.org" || host === "z.telegram.org") {
+      const msgs = [];
+      document.querySelectorAll(".bubble").forEach(el => {
+        const isMe = el.classList.contains("is-out");
+        const text = el.querySelector(".message, .text-content")?.innerText?.trim();
+        if (text && text.length > 1) msgs.push({ role: isMe ? "me" : "them", content: text });
+      });
+      if (msgs.length) return msgs.slice(-30);
+    }
+
+    // ── Discord ───────────────────────────────────────────────────────────
+    if (host.includes("discord.com")) {
+      const msgs = [];
+      document.querySelectorAll("[class*='messageListItem']").forEach(el => {
+        const authorEl = el.querySelector("[class*='username'], [class*='headerText'] [class*='roleColor'], h3[class*='header'] span");
+        const contentEl = el.querySelector("[class*='messageContent'], [id^='message-content-']");
+        const text = contentEl?.innerText?.trim();
+        if (!text) return;
+        // "You" label appears when hovering but the safest signal is checking the author
+        // Use a data attribute Discord sets on your own messages
+        const isMe = el.dataset.isOwner === "true"
+          || !!el.closest("[data-is-owner='true']")
+          || (authorEl?.innerText?.trim().toLowerCase() === "you");
+        msgs.push({ role: isMe ? "me" : "them", content: text });
+      });
+      if (msgs.length) return msgs.slice(-30);
+    }
+
+    // ── Slack ─────────────────────────────────────────────────────────────
+    if (host.includes("app.slack.com")) {
+      const msgs = [];
+      document.querySelectorAll("[data-qa='message_container']").forEach(el => {
+        // Slack marks the viewer's own messages with aria-label containing "You" as sender
+        const senderLabel = el.querySelector("[data-qa='message_sender_name']")?.innerText?.trim().toLowerCase();
+        const isMe = senderLabel === "you" || el.classList.contains("c-message_kit--self");
+        const text = el.querySelector(".p-rich_text_section")?.innerText?.trim();
+        if (text) msgs.push({ role: isMe ? "me" : "them", content: text });
+      });
+      if (msgs.length) return msgs.slice(-30);
+    }
+
+    // ── Messenger / Instagram DMs — position-based via generic fallback ───
 
     // ── Fiverr + Generic ─────────────────────────────────────────────────
     // Walk up from input to find scrollable chat container
@@ -1020,25 +1117,31 @@
           container.children.length > 2) break;
       container = container.parentElement;
     }
-    if (!container || container === document.body) return [];
+    console.log("[TE] container found:", container?.className || container?.tagName, "| scrollH:", container?.scrollHeight, "clientH:", container?.clientHeight, "children:", container?.children.length);
+    if (!container || container === document.body) { console.log("[TE] container is body — aborting"); return []; }
 
-    // Narrow to the direct child that holds the input (excludes sidebars)
-    let searchRoot = inputEl;
-    while (searchRoot?.parentElement && searchRoot.parentElement !== container) {
-      searchRoot = searchRoot.parentElement;
-    }
-    if (!searchRoot || searchRoot === container) searchRoot = container;
-    if (!searchRoot) return [];
+    // On Fiverr the message list and composer are siblings — the narrowed child that
+    // contains the input is just the compose box, which has no messages.
+    // Search from container directly; position filters below handle sidebar exclusion.
+    let searchRoot = host.includes("fiverr.com") ? container : (() => {
+      let n = inputEl;
+      while (n?.parentElement && n.parentElement !== container) n = n.parentElement;
+      return (!n || n === container) ? container : n;
+    })();
+    if (!searchRoot) { console.log("[TE] searchRoot null — aborting"); return []; }
+    console.log("[TE] searchRoot:", searchRoot?.className || searchRoot?.tagName);
 
     // ── Strategy 1: "Me" / own-name label detection
     // Fiverr shows "Me" in Chrome but full name (e.g. "Nadir Ali Khan") in Brave.
     // Detect own-name from the page header if present.
     const pageOwnerName = (
-      document.querySelector("[data-testid='username'], .username-text, .seller-name, .user-profile-name")
-        ?.innerText?.trim() ||
-      document.querySelector("h1, h2")?.innerText?.trim() ||
-      ""
+      document.querySelector(
+        "[data-testid='username'], .username-text, .seller-name, .user-profile-name, " +
+        "[class*='userName'], [class*='username'], [class*='profileName'], [class*='user-name'], " +
+        "[data-testid='user-name'], [aria-label*='profile']"
+      )?.innerText?.trim() || ""
     ).toLowerCase();
+    console.log("[TE] pageOwnerName:", JSON.stringify(pageOwnerName));
 
     const myRowRoots = new Set();
     Array.from(searchRoot.querySelectorAll("*")).forEach(el => {
@@ -1077,7 +1180,7 @@
       const ts = parseMessageTimestamp(text);
       if (ts) { lastTs = ts; return; }
 
-      if (text === "Me") return;
+      if (text === "Me" || text === "Me:") return;
       if (/^[A-Z]{1,4}$/.test(text)) return;                                    // avatar initial / short all-caps label (NAK, etc.)
       if (/^\w+$/.test(text) && /\d/.test(text) && text.length < 30) return;    // username9000 style
       if (/^\d{1,2}:\d{2}(\s*(AM|PM))?$/i.test(text)) return;
@@ -1107,46 +1210,105 @@
         if (rect.left > inputRect.right  + 5)  return;  // to the right of the input (sidebar)
       }
 
-      // Skip elements with no timestamp — these are sidebar/UI elements before the chat starts
-      if (lastTs === null) return;
-
-      seen.add(text);
-      candidates.push({ el, text, rect, timestamp: lastTs });
+      // Skip elements with no timestamp — these are sidebar/UI elements before the chat starts.
+      // If no timestamp was ever seen, allow it through as a fallback (handles browsers with
+      // different timestamp formats like Brave which may render them differently).
+      if (lastTs !== null) {
+        seen.add(text);
+        candidates.push({ el, text, rect, timestamp: lastTs });
+      } else {
+        seen.add(text);
+        candidates.push({ el, text, rect, timestamp: null });
+      }
     });
 
-    if (!candidates.length) return [];
+    // Remove candidates that appeared before any timestamp only if we have timestamped ones;
+    // otherwise keep all (Brave fallback — timestamp format not recognised).
+    const timestamped = candidates.filter(c => c.timestamp !== null);
+    const finalCandidates = timestamped.length ? timestamped : candidates;
+
+    console.log("[TE] myRowRoots size:", myRowRoots.size, "| total candidates:", candidates.length, "| timestamped:", timestamped.length, "| finalCandidates:", finalCandidates.length);
+    console.log("[TE] all candidates text:", candidates.map(c => JSON.stringify(c.text.slice(0, 60))).join(", "));
+
+    if (!finalCandidates.length) { console.log("[TE] no finalCandidates — aborting"); return []; }
+
+    // Merge consecutive fragments from the same sender into a single message.
+    // Fiverr renders multi-paragraph messages as separate leaf nodes, so without this
+    // the "last them message" ends up being the sign-off ("Sebastien") rather than the
+    // full update — causing the AI to produce a max-8-word reply.
+    function mergeConsecutive(msgs) {
+      return msgs.reduce((acc, m) => {
+        const last = acc[acc.length - 1];
+        if (last && last.role === m.role) {
+          last.content += "\n" + m.content;
+        } else {
+          acc.push({ role: m.role, content: m.content, timestamp: m.timestamp });
+        }
+        return acc;
+      }, []);
+    }
 
     // If we found "Me" labels, use label-based detection
     if (myRowRoots.size > 0) {
-      return candidates.slice(-30).map(c => ({
+      console.log("[TE] using Strategy 1 (Me-label detection)");
+      const result = mergeConsecutive(finalCandidates.slice(-30).map(c => ({
         role:      isMyRow(c.el) ? "me" : "them",
         content:   c.text,
         timestamp: c.timestamp,
-      }));
+      })));
+      console.log("[TE] extracted msgs:", result.map(m => `[${m.role}] ${m.content.slice(0, 80)}`));
+      return result;
     }
 
     // ── Strategy 2: Dynamic position-based (bubble chat layouts)
-    // Filter out full-width rows that give misleading center X
+    console.log("[TE] using Strategy 2 (position-based)");
     const rootWidth = searchRoot.getBoundingClientRect().width || window.innerWidth;
-    const bubbles   = candidates.filter(c => c.rect.width <= rootWidth * 0.82);
-    if (!bubbles.length) return candidates.slice(-30).map(c => ({ role: "them", content: c.text, timestamp: c.timestamp }));
+    const bubbles   = finalCandidates.filter(c => c.rect.width <= rootWidth * 0.82);
+    console.log("[TE] bubbles:", bubbles.length, "rootWidth:", rootWidth);
+    if (!bubbles.length) {
+      const result = mergeConsecutive(finalCandidates.slice(-30).map(c => ({ role: "them", content: c.text, timestamp: c.timestamp })));
+      console.log("[TE] no bubbles — all as them:", result.map(m => m.content.slice(0, 60)));
+      return result;
+    }
 
     const centers     = bubbles.map(c => c.rect.left + c.rect.width / 2);
     const dynamicMidX = (Math.min(...centers) + Math.max(...centers)) / 2;
+    console.log("[TE] dynamicMidX:", dynamicMidX, "centers:", centers.slice(0, 5));
 
-    return bubbles.slice(-30).map(c => ({
+    const result2 = mergeConsecutive(bubbles.slice(-30).map(c => ({
       role:      (c.rect.left + c.rect.width / 2) > dynamicMidX ? "me" : "them",
       content:   c.text,
       timestamp: c.timestamp,
-    }));
+    })));
+    console.log("[TE] extracted msgs (strat2):", result2.map(m => `[${m.role}] ${m.content.slice(0, 80)}`));
+    return result2;
   }
 
   // ── Smart Reply helpers ───────────────────────────────────────────────────
 
   function parseMessageTimestamp(text) {
-    const m = text.match(/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2}),?\s+(\d{1,2}:\d{2}\s*(AM|PM)?)/i);
-    if (!m) return null;
-    try { return new Date(`${m[1]} ${m[2]}, ${new Date().getFullYear()} ${m[3]}`); } catch (_) { return null; }
+    // "Jan 28, 10:30 AM" or "Jan 28 10:30"
+    const m1 = text.match(/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2}),?\s+(\d{1,2}:\d{2}\s*(AM|PM)?)/i);
+    if (m1) { try { return new Date(`${m1[1]} ${m1[2]}, ${new Date().getFullYear()} ${m1[3]}`); } catch (_) {} }
+    // "Today" / "Yesterday" labels
+    if (/^today$/i.test(text.trim())) return new Date();
+    if (/^yesterday$/i.test(text.trim())) { const d = new Date(); d.setDate(d.getDate() - 1); return d; }
+    // "10:30 AM" or "10:30" — standalone time = today
+    const m2 = text.match(/^(\d{1,2}:\d{2}(\s*(AM|PM))?)$/i);
+    if (m2) { try { return new Date(new Date().toDateString() + " " + m2[1]); } catch (_) {} }
+    // "28 Jun, 15:01" or "28 Jun 2024" or "28 Jun"
+    const m3 = text.match(/^(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)(?:,?\s+(\d{4}|\d{1,2}:\d{2}))?/i);
+    if (m3) {
+      try {
+        const day = m3[1], month = m3[2], extra = m3[3] || "";
+        const isYear = /^\d{4}$/.test(extra);
+        const isTime = /^\d{1,2}:\d{2}$/.test(extra);
+        const year = isYear ? extra : new Date().getFullYear();
+        const time = isTime ? extra : "00:00";
+        return new Date(`${month} ${day}, ${year} ${time}`);
+      } catch (_) {}
+    }
+    return null;
   }
 
   // ── 1. Situation detection (client-side, no extra API call) ───────────────
@@ -1217,6 +1379,7 @@
   }
 
   function buildSmartReplyMessages(chatMsgs, draftText) {
+    const host        = window.location.hostname;
     const lastThemMsg = [...chatMsgs].reverse().find(m => m.role === "them");
     const situation   = detectSituation(chatMsgs);
     const intent      = extractIntent(chatMsgs);
@@ -1225,7 +1388,7 @@
     let timeNote = "";
     if (lastThemMsg?.timestamp) {
       const mins = (Date.now() - lastThemMsg.timestamp.getTime()) / 60000;
-      if (mins >= 120) {
+      if (mins >= 720) {
         const hrs = Math.round(mins / 60);
         timeNote = `Client's message was sent ~${hrs}h ago — briefly acknowledge the wait.`;
       }
@@ -1239,8 +1402,21 @@
       return date ? `[${date}] ${who}: ${m.content}` : `${who}: ${m.content}`;
     }).join("\n");
 
-    const lastClientMsg = lastThemMsg?.content || "";
+    // Collect all consecutive trailing "them" messages (Fiverr splits multi-paragraph
+    // messages into separate leaf nodes; merge here as a safety net).
+    // Strip email-style sign-offs so they don't shrink the word count to 1-2 words.
+    const stripSignoff = (t) => t.replace(/\n+(best regards?\b|kind regards?\b|regards?\b|sincerely\b|cheers\b|warm regards?\b|yours?\b(\s+truly\b)?|thank you,)[,.\s\S]*$/im, "").trim();
+    // Walk backwards: skip any trailing "me" messages, then collect the last "them" block.
+    const trailingThemParts = [];
+    let seenThem = false;
+    for (let i = chatMsgs.length - 1; i >= 0; i--) {
+      const m = chatMsgs[i];
+      if (m.role === "them") { trailingThemParts.unshift(m.content); seenThem = true; }
+      else if (seenThem) break; // stop once we cross back into "me" after finding "them"
+    }
+    const lastClientMsg = stripSignoff(trailingThemParts.join("\n"));
     const clientWords   = lastClientMsg.trim().split(/\s+/).filter(Boolean).length;
+    console.log("[TE SR] lastClientMsg:", JSON.stringify(lastClientMsg.slice(0, 200)), "| clientWords:", clientWords);
 
     let lengthGuide, maxTokens;
     if (CFG.replyLength === "short") {
@@ -1250,17 +1426,18 @@
       lengthGuide = "Reply in 3–4 sentences covering all points thoroughly.";
       maxTokens   = 260;
     } else {
-      // Proportional: target ~55% of client word count, clamped 6–160 words
-      const target = clientWords > 0 ? Math.max(6, Math.round(clientWords * 0.55)) : 12;
-      const lo     = Math.max(4,   Math.round(target * 0.8));
-      const hi     = Math.min(160, Math.round(target * 1.2));
-      maxTokens    = Math.max(40, Math.round(hi * 1.7));
       if (clientWords <= 3) {
         // Ultra-short ("Okay", "ok", "sure") — one sentence max
         lengthGuide = `STRICT: Reply in 1 very short sentence, maximum 8 words. Client said only "${lastClientMsg.trim()}" — match that brevity.`;
-        maxTokens   = 40;
+        maxTokens   = 80;
       } else {
-        lengthGuide = `Reply in ${lo}–${hi} words. Client wrote ~${clientWords} words — your reply MUST be shorter than theirs.`;
+        // Always give a full, multi-sentence reply covering all the client's points.
+        // Minimum 60 words so the AI doesn't produce one-liners for short questions.
+        const target = Math.max(60, Math.round(clientWords * 0.9));
+        const lo     = Math.max(50, Math.round(target * 0.8));
+        const hi     = Math.min(200, Math.round(target * 1.2));
+        maxTokens    = Math.max(200, Math.round(hi * 1.8));
+        lengthGuide  = `Write a complete reply of ${lo}–${hi} words. Address every point the client raised. Do not cut off mid-thought.`;
       }
     }
 
@@ -1269,15 +1446,24 @@
     else if (CFG.replyTone === "friendly") toneGuide = "Use a warm friendly tone.";
     else if (CFG.replyTone === "casual")   toneGuide = "Use a casual relaxed tone.";
 
+    // Platform tone override when user hasn't set a preference
+    if (!toneGuide && CFG.replyTone === "auto") {
+      if (host === "web.whatsapp.com" || host.includes("messenger.com") || host.includes("instagram.com"))
+        toneGuide = "Use a natural, conversational tone — this is a personal messaging app, not a professional platform.";
+      else if (host.includes("discord.com"))
+        toneGuide = "Use a relaxed, casual tone appropriate for Discord.";
+    }
+
     let portfolioNote = "";
     try {
       const matcher = typeof window !== "undefined" && window.TE_PORTFOLIO_MATCH;
-      if (matcher) {
+      const clientAskedForPortfolio = /portfolio|example|sample|past work|similar work|show me|can i see/i.test(lastClientMsg);
+      if (matcher && clientAskedForPortfolio) {
         const scanText = [lastClientMsg, ...chatMsgs.slice(-3).map(m => m.content)].join(" ");
         const matches = matcher(scanText, 3);
         if (matches?.length) {
           const list = matches.map(m => `• ${m.desc} — ${m.url}`).join("\n");
-          portfolioNote = `\n\n[Portfolio — include 1-2 links ONLY if client is explicitly asking about similar past work. Otherwise ignore.]\n${list}`;
+          portfolioNote = `\n\n[Portfolio links — include 1-2 ONLY because client explicitly asked for examples:]\n${list}`;
         }
       }
     } catch (_) {}
@@ -1291,7 +1477,7 @@
       toneGuide || toneNote,
       lengthGuide,
       timeNote,
-      `Do NOT repeat what You already said. Do NOT add greetings unless this is the very first message. Output ONLY the reply text.`,
+      `Do NOT repeat what You already said. Do NOT add greetings unless this is the very first message. Do NOT invent specific prices or dollar amounts — if pricing comes up say you'll send a custom quote after reviewing requirements. Do NOT apologize for delays unless the client explicitly complained about waiting. Output ONLY the reply text.`,
       portfolioNote,
     ].filter(Boolean).join(" ");
 
@@ -1315,13 +1501,14 @@
     const draftText = getText(el).trim();
     const chatMsgs  = extractChatHistory(el);
 
-    if (chatMsgs.length > 0 && chatMsgs[chatMsgs.length - 1].role === "me") {
-      s.textContent = "✓";
-      setTimeout(() => { s.textContent = origIcon; s.style.pointerEvents = ""; }, 1500);
-      return;
-    }
+    console.log("[TE SR] chatMsgs count:", chatMsgs.length);
+    chatMsgs.forEach((m, i) => console.log(`[TE SR]  [${i}][${m.role}] ${m.content.slice(0, 120)}`));
 
     const { system, userContent, maxTokens } = buildSmartReplyMessages(chatMsgs, draftText);
+
+    console.log("[TE SR] system prompt:", system.slice(0, 300));
+    console.log("[TE SR] userContent:", userContent.slice(0, 500));
+    console.log("[TE SR] maxTokens:", maxTokens);
 
     if (draftText) {
       undoStack.push({ el, text: draftText });
@@ -1376,6 +1563,8 @@
     });
 
     srStreaming = false;
+
+    console.log("[TE SR] final result:", JSON.stringify(result));
 
     if (result) {
       setText(el, result);
