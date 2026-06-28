@@ -1035,16 +1035,26 @@
       );
       if (container) {
         const cRect = container.getBoundingClientRect();
-        const midX  = cRect.left + cRect.width / 2;
 
         const myFirstName = (
           document.querySelector(".global-nav__me-menu .t-16, .profile-rail-card__actor-link")
           ?.innerText?.trim()?.toLowerCase()?.split(/\s+/)[0] || ""
         );
 
-        // Range-based text position: measures where characters are actually rendered,
-        // not the bounding box of the (potentially full-width) container element.
-        const textMidX = (el) => {
+        // Collect all groups + their body elements first
+        const groups = [];
+        container.querySelectorAll(".msg-s-message-list__event").forEach(group => {
+          const bodyEl = group.querySelector(
+            ".msg-s-event-listitem__body, .msg-s-message-list__event-body, " +
+            "[class*='event-listitem__body'], [class*='eventListItem__body']"
+          );
+          const text = bodyEl?.innerText?.trim();
+          if (text && text.length >= 2) groups.push({ group, bodyEl, text });
+        });
+        if (!groups.length) return msgs;
+
+        // Measure text left-edge position for every group via Range API
+        const getTextLeft = (el) => {
           const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
             acceptNode: n => n.textContent?.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP
           });
@@ -1053,40 +1063,60 @@
           const range = document.createRange();
           range.selectNode(node);
           const rects = range.getClientRects();
-          return rects.length ? rects[0].left + rects[0].width / 2 : null;
+          return rects.length ? rects[0].left : null;
         };
+
+        const positions = groups.map(({ bodyEl }) => getTextLeft(bodyEl));
+        const valid = positions.filter(p => p !== null);
+
+        // Dynamic split: midpoint of the leftmost and rightmost text positions.
+        // Avoids relying on the container bounding rect which may span wider than the chat panel.
+        const spread = valid.length >= 2 ? Math.max(...valid) - Math.min(...valid) : 0;
+        const dynamicMidX = spread > 40
+          ? (Math.min(...valid) + Math.max(...valid)) / 2
+          : cRect.left + cRect.width / 2; // fallback when all messages at same x (single-column)
 
         let currentRole = "them";
 
-        container.querySelectorAll(".msg-s-message-list__event").forEach(group => {
-          const bodyEl = group.querySelector(
-            ".msg-s-event-listitem__body, .msg-s-message-list__event-body, " +
-            "[class*='event-listitem__body'], [class*='eventListItem__body']"
-          );
-          const text = bodyEl?.innerText?.trim();
-          if (!text || text.length < 2) return;
-
-          // Signal 1: class modifier anywhere in the group
+        groups.forEach(({ group, bodyEl, text }, i) => {
+          // Signal 1: class modifier
           const hasOutgoing = /--outgoing|--right/.test(group.className) ||
             !!group.querySelector("[class*='--outgoing'], [class*='--right']");
 
-          // Signal 2: sender name label (first message in each sender block)
+          // Signal 2: aria-label ("You said: …" or "Sent by you")
+          const aria = (group.getAttribute("aria-label") ||
+            group.querySelector("[aria-label]")?.getAttribute("aria-label") || "").toLowerCase();
+          const ariaIsMe = aria
+            ? /\byou\b.*\bsaid\b|\bsent\s+by\s+you\b|\byou:\s/.test(aria)
+            : null;
+
+          // Signal 3: explicit sender name label
           const senderName = (
             group.querySelector(".msg-s-event-listitem__name, [class*='listitem__name'], [class*='actor-name']")
             ?.innerText?.trim()?.toLowerCase() || ""
           );
 
-          if (hasOutgoing) {
+          // Signal 4: computed flex style on parent of list item
+          const listEl = group.querySelector(".msg-s-event-listitem, li");
+          const parentJustify = listEl?.parentElement
+            ? window.getComputedStyle(listEl.parentElement).justifyContent : "";
+          const flexIsMe = parentJustify === "flex-end" || parentJustify === "right";
+
+          // Signal 5: dynamic text-position split
+          const tx = positions[i];
+          const posIsMe = (spread > 40 && tx !== null) ? tx > dynamicMidX : null;
+
+          if (hasOutgoing || ariaIsMe === true || flexIsMe) {
             currentRole = "me";
+          } else if (ariaIsMe === false && aria) {
+            currentRole = "them";
           } else if (senderName) {
             currentRole = (senderName === "you" || (myFirstName && senderName.startsWith(myFirstName)))
               ? "me" : "them";
-          } else {
-            // Signal 3: actual rendered text position — works regardless of element width
-            const tx = textMidX(bodyEl);
-            if (tx !== null) currentRole = tx > midX ? "me" : "them";
-            // else: keep currentRole (same sender block continuing)
+          } else if (posIsMe !== null) {
+            currentRole = posIsMe ? "me" : "them";
           }
+          // else: keep currentRole (same sender block continuing)
 
           msgs.push({ role: currentRole, content: text });
         });
