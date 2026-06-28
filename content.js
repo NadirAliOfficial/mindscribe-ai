@@ -1037,44 +1037,28 @@
         const cRect = container.getBoundingClientRect();
         const midX  = cRect.left + cRect.width / 2;
 
-        // Detect logged-in user's first name from nav (used for sender comparison)
-        const myFullName = (
-          document.querySelector(
-            ".global-nav__me-menu .t-16, .profile-rail-card__actor-link, " +
-            "[data-control-name='nav.settings_view_profile'] .t-16"
-          )?.innerText?.trim() || ""
-        ).toLowerCase().split("\n")[0];
-        const myFirstName = myFullName.split(/\s+/)[0]; // just first name for matching
+        const myFirstName = (
+          document.querySelector(".global-nav__me-menu .t-16, .profile-rail-card__actor-link")
+          ?.innerText?.trim()?.toLowerCase()?.split(/\s+/)[0] || ""
+        );
 
-        let currentRole = "them"; // persists across consecutive messages from same sender
+        // Range-based text position: measures where characters are actually rendered,
+        // not the bounding box of the (potentially full-width) container element.
+        const textMidX = (el) => {
+          const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+            acceptNode: n => n.textContent?.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP
+          });
+          const node = walker.nextNode();
+          if (!node) return null;
+          const range = document.createRange();
+          range.selectNode(node);
+          const rects = range.getClientRects();
+          return rects.length ? rects[0].left + rects[0].width / 2 : null;
+        };
+
+        let currentRole = "them";
 
         container.querySelectorAll(".msg-s-message-list__event").forEach(group => {
-          // 1. Class-based: check for --outgoing / --right modifier on any descendant
-          const hasOutgoing = !!group.querySelector(
-            "[class*='--outgoing'], [class*='--right'], [class*='outgoing']"
-          );
-
-          // 2. Sender name: only present on first message of each sender group
-          const senderName = (
-            group.querySelector(
-              ".msg-s-event-listitem__name, [class*='event-listitem__name'], " +
-              "[class*='senderName'], [class*='sender-name']"
-            )?.innerText?.trim() || ""
-          ).toLowerCase();
-
-          if (hasOutgoing) {
-            currentRole = "me";
-          } else if (senderName) {
-            // "you" label or name matches our detected profile name
-            if (senderName === "you" || (myFirstName && senderName.startsWith(myFirstName))) {
-              currentRole = "me";
-            } else {
-              currentRole = "them";
-            }
-          }
-          // else: no new sender info → keep currentRole (continuation of same sender block)
-
-          // 3. Position-based on the deepest bubble element as final fallback
           const bodyEl = group.querySelector(
             ".msg-s-event-listitem__body, .msg-s-message-list__event-body, " +
             "[class*='event-listitem__body'], [class*='eventListItem__body']"
@@ -1082,13 +1066,26 @@
           const text = bodyEl?.innerText?.trim();
           if (!text || text.length < 2) return;
 
-          if (!hasOutgoing && !senderName) {
-            // Measure the actual bubble (<p> or first child) not the full-width wrapper
-            const bubbleEl = bodyEl.querySelector("p, [class*='message-bubble'], [class*='messageBubble']") || bodyEl;
-            const bRect = bubbleEl.getBoundingClientRect();
-            if (bRect.width > 10 && bRect.width < cRect.width * 0.85) {
-              currentRole = (bRect.left + bRect.width / 2) > midX ? "me" : "them";
-            }
+          // Signal 1: class modifier anywhere in the group
+          const hasOutgoing = /--outgoing|--right/.test(group.className) ||
+            !!group.querySelector("[class*='--outgoing'], [class*='--right']");
+
+          // Signal 2: sender name label (first message in each sender block)
+          const senderName = (
+            group.querySelector(".msg-s-event-listitem__name, [class*='listitem__name'], [class*='actor-name']")
+            ?.innerText?.trim()?.toLowerCase() || ""
+          );
+
+          if (hasOutgoing) {
+            currentRole = "me";
+          } else if (senderName) {
+            currentRole = (senderName === "you" || (myFirstName && senderName.startsWith(myFirstName)))
+              ? "me" : "them";
+          } else {
+            // Signal 3: actual rendered text position — works regardless of element width
+            const tx = textMidX(bodyEl);
+            if (tx !== null) currentRole = tx > midX ? "me" : "them";
+            // else: keep currentRole (same sender block continuing)
           }
 
           msgs.push({ role: currentRole, content: text });
