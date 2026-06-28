@@ -1034,89 +1034,57 @@
         ".msg-s-message-list-container, .msg-overlay-conversation-bubble__content-wrapper"
       );
       if (container) {
-        const cRect = container.getBoundingClientRect();
+        // Get logged-in user's name from nav profile image (most reliable source).
+        // LinkedIn always puts the user's full name as the alt text of their avatar.
+        const myName = (
+          document.querySelector(".global-nav__me-menu img, .global-nav__me-menu-btn img")?.alt?.trim() ||
+          document.querySelector(".global-nav__me-menu .t-16")?.innerText?.trim() ||
+          ""
+        ).toLowerCase();
+        const myFirstName = myName.split(/\s+/)[0];
 
-        const myFirstName = (
-          document.querySelector(".global-nav__me-menu .t-16, .profile-rail-card__actor-link")
-          ?.innerText?.trim()?.toLowerCase()?.split(/\s+/)[0] || ""
-        );
+        // Extract sender name from a message group's avatar.
+        // LinkedIn puts the sender's name in: img alt, or aria-label "View [Name]'s profile".
+        const getSenderName = (group) => {
+          const img = group.querySelector("img");
+          if (!img) return ""; // no avatar → continuation of same sender block
+          const fromAlt = img.alt?.trim().toLowerCase();
+          if (fromAlt) return fromAlt;
+          // Fallback: aria-label on the avatar anchor "View [Name]'s profile"
+          const label = img.closest("a[aria-label]")?.getAttribute("aria-label") || "";
+          return label.replace(/^View\s+/i, "").replace(/'s\s+profile\s*$/i, "").trim().toLowerCase();
+        };
 
-        // Collect all groups + their body elements first
-        const groups = [];
+        let currentRole = "them";
+
         container.querySelectorAll(".msg-s-message-list__event").forEach(group => {
           const bodyEl = group.querySelector(
             ".msg-s-event-listitem__body, .msg-s-message-list__event-body, " +
             "[class*='event-listitem__body'], [class*='eventListItem__body']"
           );
           const text = bodyEl?.innerText?.trim();
-          if (text && text.length >= 2) groups.push({ group, bodyEl, text });
-        });
-        if (!groups.length) return msgs;
+          if (!text || text.length < 2) return;
 
-        // Measure text left-edge position for every group via Range API
-        const getTextLeft = (el) => {
-          const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
-            acceptNode: n => n.textContent?.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP
-          });
-          const node = walker.nextNode();
-          if (!node) return null;
-          const range = document.createRange();
-          range.selectNode(node);
-          const rects = range.getClientRects();
-          return rects.length ? rects[0].left : null;
-        };
+          const senderName = getSenderName(group);
+          const hasAvatar = !!group.querySelector("img");
 
-        const positions = groups.map(({ bodyEl }) => getTextLeft(bodyEl));
-        const valid = positions.filter(p => p !== null);
-
-        // Dynamic split: midpoint of the leftmost and rightmost text positions.
-        // Avoids relying on the container bounding rect which may span wider than the chat panel.
-        const spread = valid.length >= 2 ? Math.max(...valid) - Math.min(...valid) : 0;
-        const dynamicMidX = spread > 40
-          ? (Math.min(...valid) + Math.max(...valid)) / 2
-          : cRect.left + cRect.width / 2; // fallback when all messages at same x (single-column)
-
-        let currentRole = "them";
-
-        groups.forEach(({ group, bodyEl, text }, i) => {
-          // Signal 1: class modifier
-          const hasOutgoing = /--outgoing|--right/.test(group.className) ||
-            !!group.querySelector("[class*='--outgoing'], [class*='--right']");
-
-          // Signal 2: aria-label ("You said: …" or "Sent by you")
-          const aria = (group.getAttribute("aria-label") ||
-            group.querySelector("[aria-label]")?.getAttribute("aria-label") || "").toLowerCase();
-          const ariaIsMe = aria
-            ? /\byou\b.*\bsaid\b|\bsent\s+by\s+you\b|\byou:\s/.test(aria)
-            : null;
-
-          // Signal 3: explicit sender name label
-          const senderName = (
-            group.querySelector(".msg-s-event-listitem__name, [class*='listitem__name'], [class*='actor-name']")
-            ?.innerText?.trim()?.toLowerCase() || ""
-          );
-
-          // Signal 4: computed flex style on parent of list item
-          const listEl = group.querySelector(".msg-s-event-listitem, li");
-          const parentJustify = listEl?.parentElement
-            ? window.getComputedStyle(listEl.parentElement).justifyContent : "";
-          const flexIsMe = parentJustify === "flex-end" || parentJustify === "right";
-
-          // Signal 5: dynamic text-position split
-          const tx = positions[i];
-          const posIsMe = (spread > 40 && tx !== null) ? tx > dynamicMidX : null;
-
-          if (hasOutgoing || ariaIsMe === true || flexIsMe) {
-            currentRole = "me";
-          } else if (ariaIsMe === false && aria) {
-            currentRole = "them";
-          } else if (senderName) {
-            currentRole = (senderName === "you" || (myFirstName && senderName.startsWith(myFirstName)))
-              ? "me" : "them";
-          } else if (posIsMe !== null) {
-            currentRole = posIsMe ? "me" : "them";
+          if (hasAvatar && senderName) {
+            // Avatar present → new sender block; compare name to decide role
+            if (myFirstName && senderName.startsWith(myFirstName)) {
+              currentRole = "me";
+            } else if (myName && senderName === myName) {
+              currentRole = "me";
+            } else {
+              currentRole = "them";
+            }
           }
-          // else: keep currentRole (same sender block continuing)
+          // No avatar (or blank alt) → continuation of same sender, keep currentRole
+
+          // Override with class modifier if present (belt-and-suspenders)
+          if (/--outgoing|--right/.test(group.className) ||
+              !!group.querySelector("[class*='--outgoing'], [class*='--right']")) {
+            currentRole = "me";
+          }
 
           msgs.push({ role: currentRole, content: text });
         });
