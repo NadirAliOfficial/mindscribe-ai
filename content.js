@@ -1056,6 +1056,7 @@
         };
 
         let currentRole = "them";
+        let debugCount = 0;
 
         container.querySelectorAll(".msg-s-message-list__event").forEach(group => {
           const bodyEl = group.querySelector(
@@ -1064,6 +1065,18 @@
           );
           const text = bodyEl?.innerText?.trim();
           if (!text || text.length < 2) return;
+
+          // Debug first 4 groups to expose actual DOM signals
+          if (debugCount < 4) {
+            debugCount++;
+            console.log(`[TE LI] group[${debugCount}] text="${text.slice(0,25)}"`, {
+              groupAria: group.getAttribute("aria-label")?.slice(0, 100),
+              innerTextStart: group.innerText?.slice(0, 120).replace(/\n/g, "↵"),
+              imgs: Array.from(group.querySelectorAll("img")).slice(0, 3).map(i => ({ alt: i.alt, ariaLink: i.closest("a")?.getAttribute("aria-label")?.slice(0, 60) })),
+              aAriaLabels: Array.from(group.querySelectorAll("a[aria-label]")).slice(0, 3).map(a => a.getAttribute("aria-label")?.slice(0, 60)),
+              myName, myFirstName,
+            });
+          }
 
           const senderName = getSenderName(group);
           const hasAvatar = !!group.querySelector("img");
