@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "ReplyMind AI",
-  "version": "1.1.0",
-  "description": "Smart replies and text enhancement for Fiverr, LinkedIn, WhatsApp, Telegram, Discord, Slack, and more.",
+  "name": "Mindscribe AI",
+  "version": "1.1.2",
+  "description": "AI-powered reply suggestions and text enhancement for any text field on the web.",
 
-  "permissions": ["activeTab", "storage"],
+  "permissions": ["storage"],
 
   "host_permissions": [
     "http://*/*",
@@ -28,7 +28,7 @@
 
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Text Enhancer Settings",
+    "default_title": "Mindscribe AI Settings",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",

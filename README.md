@@ -1,4 +1,4 @@
-# ReplyMind AI
+# Mindscribe AI
 
 AI-powered Chrome extension for smart replies and text enhancement — works across Fiverr, LinkedIn, WhatsApp, Telegram, Discord, Slack, Messenger, Instagram DMs, and any text field on the web.
 
