@@ -1474,13 +1474,13 @@
         lengthGuide = `STRICT: Reply in 1 very short sentence, maximum 8 words. Client said only "${lastClientMsg.trim()}" — match that brevity.`;
         maxTokens   = 80;
       } else {
-        // Always give a full, multi-sentence reply covering all the client's points.
-        // Minimum 60 words so the AI doesn't produce one-liners for short questions.
-        const target = Math.max(60, Math.round(clientWords * 0.9));
-        const lo     = Math.max(50, Math.round(target * 0.8));
-        const hi     = Math.min(200, Math.round(target * 1.2));
-        maxTokens    = Math.max(200, Math.round(hi * 1.8));
-        lengthGuide  = `Write a complete reply of ${lo}–${hi} words. Address every point the client raised. Do not cut off mid-thought.`;
+        // Concise by default — address the client's points without padding.
+        // Scales up a little for longer client messages, but stays capped well short of an essay.
+        const target = Math.max(20, Math.round(clientWords * 0.5));
+        const lo     = Math.max(15, Math.round(target * 0.8));
+        const hi     = Math.min(70, Math.round(target * 1.2));
+        maxTokens    = Math.max(120, Math.round(hi * 1.8));
+        lengthGuide  = `Write a concise reply of ${lo}–${hi} words. Address the client's main point directly — no padding, no restating what they said, no unnecessary elaboration. Do not cut off mid-thought.`;
       }
     }
 
