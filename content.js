@@ -480,6 +480,7 @@
       port.onDisconnect.addListener(() => { clearTimeout(timer); if (!settled) fail(new Error("Disconnected")); });
       const lines = chatMsgs.slice(-6).map(m => `${m.role === "me" ? "You" : "Them"}: ${m.content}`).join("\n");
       port.postMessage({
+        model: CFG.modelSelect || MODEL,
         messages: [
           { role: "system", content: "Detect the language Them is using. Write You's reply in that SAME language. Output ONLY the reply text." },
           { role: "user",   content: `Conversation:\n${lines}\n\nWrite You's reply in the same language as Them:` },
@@ -849,7 +850,7 @@
         runtimeSendMessage({
           type: "ollama",
           payload: {
-            model: MODEL,
+            model: CFG.modelSelect || MODEL,
             stream: false,
             options: getOllamaOptions(type, text),
             messages: [
@@ -999,7 +1000,7 @@
     });
 
     port.postMessage({
-      model: MODEL,
+      model: CFG.modelSelect || MODEL,
       messages: [
         { role: "system", content: getSystemMsg(type, text) },
         ...SHOTS[type],
@@ -1589,6 +1590,7 @@
       });
 
       port.postMessage({
+        model: CFG.modelSelect || MODEL,
         messages: [
           { role: "system", content: system },
           { role: "user",   content: userContent },
@@ -1918,6 +1920,7 @@
       });
       port.onDisconnect.addListener(() => { clearTimeout(timer); if (!settled) fail(new Error("Disconnected")); });
       port.postMessage({
+        model: CFG.modelSelect || MODEL,
         messages: [
           { role: "system", content: "Summarize this conversation in 3 concise bullet points. Output ONLY the bullets, no intro." },
           { role: "user",   content: lines },
