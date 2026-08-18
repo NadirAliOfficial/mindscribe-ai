@@ -96,7 +96,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     const body = {
-      model: message.payload.model || "llama-3.3-70b-versatile",
+      model: message.payload.model || "openai/gpt-oss-120b",
       messages,
       temperature: options.temperature ?? 0.3,
       ...(options.num_predict > 0 ? { max_tokens: options.num_predict } : {}),
@@ -205,7 +205,7 @@ chrome.runtime.onConnect.addListener((port) => {
     if (!keys.length) { port.postMessage({ error: "No API key — add one in popup → API tab" }); return; }
 
     const body = {
-      model: payload.model || "llama-3.3-70b-versatile",
+      model: payload.model || "openai/gpt-oss-120b",
       messages,
       temperature: options.temperature ?? 0.3,
       ...(options.num_predict > 0 ? { max_tokens: options.num_predict } : {}),

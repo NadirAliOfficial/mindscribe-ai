@@ -42,7 +42,7 @@ Suggests completions as you type based on context.
 Open the extension popup to set:
 - Groq API key (up to 3 keys, auto-rotated on rate limit)
 - Reply tone: Auto / Professional / Friendly / Casual
-- Model: Llama 3.3 70B (default), Llama 3.1 8B, Mixtral, Gemma
+- Model: GPT-OSS 120B (default), GPT-OSS 20B
 
 ## License
 

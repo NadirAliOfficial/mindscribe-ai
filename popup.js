@@ -15,7 +15,7 @@ const DEFAULTS = {
   customDefault:   "Make this text more concise and impactful.",
   disabledActions: [],
   apiKey:          "",
-  modelSelect:     "llama-3.3-70b-versatile",
+  modelSelect:     "openai/gpt-oss-120b",
   temperature:     3,
   modelBackend:    "groq",
 };
@@ -187,7 +187,7 @@ document.getElementById("testBtn")?.addEventListener("click", async () => {
       const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + keys[i] },
-        body: JSON.stringify({ model: settings.modelSelect || "llama-3.3-70b-versatile", messages: [{ role: "user", content: "Hi" }], max_tokens: 5 }),
+        body: JSON.stringify({ model: settings.modelSelect || "openai/gpt-oss-120b", messages: [{ role: "user", content: "Hi" }], max_tokens: 5 }),
       });
       const status = document.getElementById("keyStatus" + (i + 1));
       if (r.ok) {
@@ -266,7 +266,7 @@ function renderAll() {
   const ttEl = document.getElementById("translateTarget");
   if (ttEl) ttEl.value = settings.translateTarget || "auto";
   const msEl = document.getElementById("modelSelect");
-  if (msEl) msEl.value = settings.modelSelect || "llama-3.3-70b-versatile";
+  if (msEl) msEl.value = settings.modelSelect || "openai/gpt-oss-120b";
 
   // Text inputs
   const cdEl = document.getElementById("customDefault");
