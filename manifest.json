@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Mindscribe AI",
-  "version": "1.1.3",
+  "version": "1.1.4",
   "description": "AI-powered reply suggestions and text enhancement for any text field on the web.",
 
   "permissions": ["storage"],
