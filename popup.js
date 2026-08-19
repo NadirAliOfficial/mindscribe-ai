@@ -187,7 +187,7 @@ document.getElementById("testBtn")?.addEventListener("click", async () => {
       const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + keys[i] },
-        body: JSON.stringify({ model: settings.modelSelect || "openai/gpt-oss-120b", messages: [{ role: "user", content: "Hi" }], max_tokens: 5 }),
+        body: JSON.stringify({ model: settings.modelSelect || "openai/gpt-oss-120b", messages: [{ role: "user", content: "Hi" }], reasoning_effort: "low", max_tokens: 20 }),
       });
       const status = document.getElementById("keyStatus" + (i + 1));
       if (r.ok) {

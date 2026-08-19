@@ -99,6 +99,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       model: message.payload.model || "openai/gpt-oss-120b",
       messages,
       temperature: options.temperature ?? 0.3,
+      reasoning_effort: "low", // GPT-OSS reasoning tokens count against max_tokens — keep low so short outputs aren't starved
       ...(options.num_predict > 0 ? { max_tokens: options.num_predict } : {}),
       stream: false,
     };
@@ -208,6 +209,7 @@ chrome.runtime.onConnect.addListener((port) => {
       model: payload.model || "openai/gpt-oss-120b",
       messages,
       temperature: options.temperature ?? 0.3,
+      reasoning_effort: "low", // GPT-OSS reasoning tokens count against max_tokens — keep low so short outputs aren't starved
       ...(options.num_predict > 0 ? { max_tokens: options.num_predict } : {}),
       stream: true,
     };
