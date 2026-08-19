@@ -115,8 +115,16 @@ document.getElementById("customDefault")?.addEventListener("input", (e) => {
 
 // ── 3 API key slots ───────────────────────────────────────────────────────────
 function saveKeys() {
+  // Strip anything outside printable ASCII — pasting from WhatsApp/chat apps can
+  // silently inject invisible Unicode formatting characters that break the
+  // Authorization header (fetch throws "non ISO-8859-1 code point").
   const keys = ["apiKey1","apiKey2","apiKey3"]
-    .map(id => document.getElementById(id)?.value.trim() || "")
+    .map(id => {
+      const el = document.getElementById(id);
+      const clean = (el?.value || "").replace(/[^\x20-\x7E]/g, "").trim();
+      if (el) el.value = clean;
+      return clean;
+    })
     .filter(Boolean);
   chrome.storage.local.set({ te_api_keys: keys }, () => showToast("✓ Keys saved"));
 }
@@ -172,7 +180,7 @@ document.getElementById("testBtn")?.addEventListener("click", async () => {
   btn.textContent = "Testing…"; btn.disabled = true;
 
   const keys = ["apiKey1","apiKey2","apiKey3"]
-    .map(id => document.getElementById(id)?.value.trim() || "")
+    .map(id => (document.getElementById(id)?.value || "").replace(/[^\x20-\x7E]/g, "").trim())
     .filter(Boolean);
 
   if (!keys.length) {
