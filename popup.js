@@ -118,14 +118,19 @@ function saveKeys() {
   // Strip anything outside printable ASCII — pasting from WhatsApp/chat apps can
   // silently inject invisible Unicode formatting characters that break the
   // Authorization header (fetch throws "non ISO-8859-1 code point").
+  // A blank, untouched field keeps its previously-saved key instead of being
+  // treated as cleared, since saved keys are never re-rendered in plaintext.
   const keys = ["apiKey1","apiKey2","apiKey3"]
-    .map(id => {
+    .map((id, i) => {
       const el = document.getElementById(id);
-      const clean = (el?.value || "").replace(/[^\x20-\x7E]/g, "").trim();
-      if (el) el.value = clean;
+      if (!el) return "";
+      if (!el.value && el.dataset.hasKey) return (settings.apiKeys || [])[i] || "";
+      const clean = el.value.replace(/[^\x20-\x7E]/g, "").trim();
+      el.value = clean;
       return clean;
     })
     .filter(Boolean);
+  settings.apiKeys = keys;
   chrome.storage.local.set({ te_api_keys: keys }, () => showToast("✓ Keys saved"));
 }
 
@@ -180,7 +185,11 @@ document.getElementById("testBtn")?.addEventListener("click", async () => {
   btn.textContent = "Testing…"; btn.disabled = true;
 
   const keys = ["apiKey1","apiKey2","apiKey3"]
-    .map(id => (document.getElementById(id)?.value || "").replace(/[^\x20-\x7E]/g, "").trim())
+    .map((id, i) => {
+      const el = document.getElementById(id);
+      if (el && !el.value && el.dataset.hasKey) return (settings.apiKeys || [])[i] || "";
+      return (el?.value || "").replace(/[^\x20-\x7E]/g, "").trim();
+    })
     .filter(Boolean);
 
   if (!keys.length) {
@@ -280,11 +289,15 @@ function renderAll() {
   const cdEl = document.getElementById("customDefault");
   if (cdEl) cdEl.value = settings.customDefault || DEFAULTS.customDefault;
 
-  // API key slots
+  // API key slots — never re-render saved secrets into the DOM; show a masked
+  // placeholder instead so plaintext keys aren't exposed via input.value.
   const keys = settings.apiKeys || [];
   ["apiKey1","apiKey2","apiKey3"].forEach((id, i) => {
     const el = document.getElementById(id);
-    if (el) el.value = keys[i] || "";
+    if (!el) return;
+    el.value = "";
+    el.dataset.hasKey = keys[i] ? "1" : "";
+    el.placeholder = keys[i] ? "•••••••• (saved — type to replace)" : "gsk_...";
   });
 
   // Action toggles
