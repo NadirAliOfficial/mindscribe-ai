@@ -525,65 +525,12 @@
     if (result) { setText(el, result); scheduleFollowUp(el); }
   }
 
-  // Where the cursor/caret actually is, not just the field's outer box —
-  // so the toolbar tracks where you're typing instead of sitting at a fixed
-  // corner of a large textarea/contenteditable.
-  function getCaretRect(el) {
-    if (el.isContentEditable) {
-      try {
-        const sel = window.getSelection();
-        if (sel.rangeCount > 0) {
-          const range = sel.getRangeAt(0).cloneRange();
-          range.collapse(false);
-          const rects = range.getClientRects();
-          if (rects.length) return rects[rects.length - 1];
-          const r = range.getBoundingClientRect();
-          if (r.width || r.height || r.top) return r;
-        }
-      } catch (_) {}
-      return el.getBoundingClientRect();
-    }
-
-    // <textarea>/<input> — no native caret-position API, so mirror the field
-    // in a hidden div up to the caret and measure where that text ends.
-    try {
-      const style = window.getComputedStyle(el);
-      const mirror = document.createElement("div");
-      [
-        "boxSizing","width","paddingTop","paddingRight","paddingBottom","paddingLeft",
-        "borderTopWidth","borderRightWidth","borderBottomWidth","borderLeftWidth",
-        "fontFamily","fontSize","fontWeight","fontStyle","letterSpacing","lineHeight",
-        "textTransform","wordSpacing",
-      ].forEach((p) => { mirror.style[p] = style[p]; });
-      mirror.style.position   = "absolute";
-      mirror.style.visibility = "hidden";
-      mirror.style.whiteSpace = "pre-wrap";
-      mirror.style.wordWrap   = "break-word";
-      mirror.style.top  = "0";
-      mirror.style.left = "-9999px";
-
-      const caretPos   = el.selectionEnd ?? el.value.length;
-      mirror.textContent = el.value.substring(0, caretPos);
-      const marker = document.createElement("span");
-      marker.textContent = el.value.substring(caretPos)[0] || ".";
-      mirror.appendChild(marker);
-      document.body.appendChild(mirror);
-
-      const markerRect = marker.getBoundingClientRect();
-      const mirrorRect = mirror.getBoundingClientRect();
-      const elRect      = el.getBoundingClientRect();
-      const relTop  = markerRect.top  - mirrorRect.top;
-      const relLeft = markerRect.left - mirrorRect.left;
-      document.body.removeChild(mirror);
-
-      const top = elRect.top - el.scrollTop + relTop;
-      return { top, bottom: top + markerRect.height, left: elRect.left - el.scrollLeft + relLeft, right: elRect.left - el.scrollLeft + relLeft };
-    } catch (_) {
-      return el.getBoundingClientRect();
-    }
-  }
-
-  function positionToolbar(el) {
+  // Simple, predictable placement: fixed to the top-right corner of the actual
+  // field the keystroke landed on. `anchorEl` (the raw event target) is used
+  // for the rect instead of `el` (which may be editableRoot()'s walked-up
+  // result) — on some sites editableRoot climbs through nested contenteditable
+  // ancestors and lands on a container far bigger than the real compose box.
+  function positionToolbar(el, anchorEl) {
     const t = getToolbar();
     const s = getSrBtn();
 
@@ -595,28 +542,14 @@
     else                                 t.style.display = "none";
     if (CFG.srEnabled && isChatSite())  s.style.display = "flex";
     else                                s.style.display = "none";
-    const fieldRect = el.getBoundingClientRect();
+
+    const fieldRect = (anchorEl || el).getBoundingClientRect();
     if (!toolbarDragged && hasText) {
-      let r = getCaretRect(el);
-      // Sanity check — some chat UIs (Fiverr inbox included) rebuild the compose
-      // box's DOM reactively after each keystroke, which can leave the browser's
-      // selection pointing at a stale/detached node. If the "caret" we got back
-      // isn't actually within the field itself, it's garbage — use the field's
-      // own position instead of trusting it.
-      const within = r.top >= fieldRect.top - 4 && r.top <= fieldRect.bottom + 4
-                  && r.left >= fieldRect.left - 4 && r.left <= fieldRect.right + 4;
-      if (!within) r = fieldRect;
-      console.log("[TE] positionToolbar — el:", el.tagName, el.id || "(no id)", el.className || "(no class)",
-        "| isContentEditable:", el.isContentEditable,
-        "| fieldRect:", JSON.stringify(fieldRect),
-        "| caretRect:", JSON.stringify(getCaretRect(el)),
-        "| within-field:", within, "| final r used:", JSON.stringify(r));
-      t.style.top  = Math.min(r.bottom + 6, window.innerHeight - 46) + "px";
-      t.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 280)) + "px";
+      t.style.top  = Math.max(4, fieldRect.top - 40) + "px"; // just above the field, fixed
+      t.style.left = Math.max(8, Math.min(fieldRect.left, window.innerWidth - 280)) + "px";
     }
-    const r = fieldRect;
-    s.style.top  = Math.max(4, r.bottom - 34) + "px";
-    s.style.left = Math.max(4, r.right - 34)  + "px";
+    s.style.top  = Math.max(4, fieldRect.bottom - 34) + "px";
+    s.style.left = Math.max(4, fieldRect.right  - 34) + "px";
   }
 
   function hideToolbar() {
@@ -1773,7 +1706,7 @@
   let typingTimer  = null;
   let suggestTimer = null;
 
-  function handleTyping(el) {
+  function handleTyping(el, anchorEl) {
     if (!isEditable(el)) return;
     if (srStreaming) return; // don't interfere while smart reply is streaming
     focused = el; lastFocused = el;
@@ -1788,7 +1721,7 @@
     const suggestVisible = suggest && suggest.style.display !== "none";
     if (!suggestVisible || text !== originalForDiff) hideSuggest();
 
-    positionToolbar(el);
+    positionToolbar(el, anchorEl);
 
     // Auto-suggest: only when site is enabled, text has a detectable error, and meets minimum length
     const _score = typoScore(text);
@@ -1836,7 +1769,7 @@
   function onInput(e) {
     const target = e?.target || document.activeElement;
     if (!isEditable(target)) return;
-    handleTyping(editableRoot(target));
+    handleTyping(editableRoot(target), target);
   }
 
   // Capture phase so LinkedIn/modal sites can't stop propagation before we see the event
@@ -1857,7 +1790,7 @@
     const el = editableRoot(e.target);
     if (focused === el) return;
     focused = el; lastFocused = el;
-    positionToolbar(el);
+    positionToolbar(el, e.target);
     watchFocusedEl(el);
   }, { capture: true });
 
@@ -1879,7 +1812,7 @@
     if (!isEditable(e.target)) return;
     const el = editableRoot(e.target);
     focused = el; lastFocused = el;
-    positionToolbar(el);
+    positionToolbar(el, e.target);
     watchFocusedEl(el);
   }, { capture: true });
 
