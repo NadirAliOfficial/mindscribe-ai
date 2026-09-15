@@ -5,58 +5,87 @@
   z-index: 2147483647;
   display: none;
   flex-direction: row;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 6px;
-  background: #0d0d0d;
-  border: 1px solid rgba(108, 71, 255, 0.4);
-  border-radius: 14px;
+  justify-content: center;
+  padding: 2px;
+  background: rgba(10, 8, 16, 0.94);
+  border: 1px solid rgba(168, 85, 247, 0.45);
+  border-radius: 50%;
   box-shadow:
-    0 0 0 1px rgba(108, 71, 255, 0.07),
-    0 16px 48px rgba(0, 0, 0, 0.75),
-    0 4px 14px rgba(0, 0, 0, 0.5);
+    0 0 0 1px rgba(168, 85, 247, 0.2),
+    0 6px 18px rgba(0, 0, 0, 0.75),
+    0 0 12px rgba(168, 85, 247, 0.35);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   animation: te-fadein 0.18s cubic-bezier(0.16,1,0.3,1);
   cursor: grab;
   user-select: none;
+  transition: left 0.08s cubic-bezier(0.2, 0, 0, 1), top 0.08s cubic-bezier(0.2, 0, 0, 1);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
-.te-action-btn {
+#te-toolbar.te-dragging {
+  transition: none !important;
+}
+
+.te-smart-btn {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #aaa;
-  background: #181818;
-  border: 1px solid #282828;
-  border-radius: 9px;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: radial-gradient(circle, #1a142e 0%, #0d0a18 100%);
+  border: 1px solid rgba(168, 85, 247, 0.35);
+  border-radius: 50%;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.13s, color 0.13s, border-color 0.13s, box-shadow 0.13s, transform 0.1s;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   line-height: 1;
-  font-family: inherit;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
 }
 
-/* Expand toggle — small, icon-only, rotates when the "more" group opens */
-.te-expand-btn {
-  padding: 6px 7px;
-  transition: transform 0.15s, background 0.13s, color 0.13s, border-color 0.13s;
+.te-smart-btn:hover {
+  background: radial-gradient(circle, #2d1c4d 0%, #150e26 100%);
+  border-color: rgba(192, 132, 252, 0.85);
+  box-shadow:
+    0 0 16px rgba(168, 85, 247, 0.65),
+    0 4px 12px rgba(0, 0, 0, 0.6);
+  transform: scale(1.12);
 }
-#te-toolbar.te-expanded .te-expand-btn { transform: rotate(180deg); color: #4ade80; }
 
-/* Collapsed by default — only the primary action + expand toggle show until clicked.
-   !important guards against host-page global CSS (LinkedIn etc. reset styles
-   aggressively) silently overriding display on injected elements. */
-.te-more-actions {
-  display: none !important;
-  align-items: center;
-  gap: 4px;
+.te-smart-btn:active {
+  transform: scale(0.94);
+  box-shadow: none;
 }
-#te-toolbar.te-expanded .te-more-actions {
-  display: flex !important;
-  animation: te-fadein 0.14s cubic-bezier(0.16,1,0.3,1);
+
+.te-smart-btn:disabled {
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.te-btn-logo {
+  width: 18px;
+  height: 18px;
+  border-radius: 0;
+  object-fit: contain;
+  display: block;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 3px rgba(168, 85, 247, 0.6)) drop-shadow(0 0 3px rgba(52, 211, 153, 0.5));
+  transition: filter 0.18s ease;
+}
+
+.te-smart-btn:hover .te-btn-logo {
+  filter: drop-shadow(0 0 8px rgba(192, 132, 252, 0.95)) drop-shadow(0 0 6px rgba(52, 211, 153, 0.85));
+}
+
+@keyframes te-pulse-glow {
+  0% { transform: scale(1); filter: drop-shadow(0 0 4px rgba(168, 85, 247, 0.6)) drop-shadow(0 0 4px rgba(52, 211, 153, 0.5)); }
+  50% { transform: scale(1.12); filter: drop-shadow(0 0 12px rgba(192, 132, 252, 1)) drop-shadow(0 0 8px rgba(52, 211, 153, 0.9)); }
+  100% { transform: scale(1); filter: drop-shadow(0 0 4px rgba(168, 85, 247, 0.6)) drop-shadow(0 0 4px rgba(52, 211, 153, 0.5)); }
+}
+
+.te-smart-btn.te-loading .te-btn-logo {
+  animation: te-pulse-glow 0.9s infinite ease-in-out;
 }
 
 .te-action-btn:hover {

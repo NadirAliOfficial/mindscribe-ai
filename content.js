@@ -26,7 +26,7 @@
   ];
 
   const SHOTS = {
-    rewrite: [], proofread: [], professional: [], shorten: [], clean: [],
+    enhance: [], rewrite: [], proofread: [], professional: [], shorten: [], clean: [],
   };
 
   // ── Live settings (synced in real-time via storage.onChanged) ───────────
@@ -79,6 +79,7 @@
   let customPrompt = CFG.customDefault;
 
   const SYSTEM_MSG = {
+    enhance:      "You are Mindscribe AI, an intelligent adaptive writing enhancer. Analyze the text in <input> tags and enhance it:\n1. TONE ADAPTATION: If the text is casual or friendly (e.g., informal chats, greetings like 'hey', 'bro', emojis), preserve that casual, warm, conversational tone — NEVER make it sound stiff, robotic, or overly corporate. If the text is professional, business, or formal (e.g., work emails, client inquiries, greetings like 'Hello', 'Dear'), make it articulate, polished, crisp, and professional.\n2. ERROR CORRECTION: Fix all spelling errors, typos, grammatical mistakes, missing punctuation, and capitalization.\n3. NATURAL POLISH: Improve clarity and flow while keeping the author's original meaning and authentic voice.\n4. FORMAT: Preserve the exact paragraph structure and blank lines. Output ONLY the enhanced text. Do NOT include <input> tags, quotes, or explanations.",
     rewrite:      "Rephrase the text in <input> tags using different wording. Keep the same meaning, length, and speaker perspective. IMPORTANT: Preserve the exact paragraph structure — keep blank lines between paragraphs exactly as in the original. Output ONLY the rewritten text. Do NOT include <input> tags or any explanation.",
     proofread:    "Fix all grammar, spelling, and punctuation in the text in <input> tags. Do not change wording or style. IMPORTANT: Preserve the exact paragraph structure — keep blank lines between paragraphs exactly as in the original. Output ONLY the corrected text without <input> tags and without any explanation.",
     shorten:      "Shorten the text in <input> tags. Keep ALL points and information — only remove filler and redundancy. Keep the speaker's voice. IMPORTANT: Preserve the paragraph structure — keep blank lines between paragraphs. Output ONLY the shortened text. Do NOT include <input> tags or any explanation.",
@@ -88,6 +89,7 @@
 
   // Shorter, stricter prompts for small local Ollama models which ignore long instructions
   const SYSTEM_MSG_OLLAMA = {
+    enhance:      "Fix all typos, spelling, and grammar in <input> tags. If casual, keep it casual and friendly. If formal, make it professional. Output ONLY the corrected text without explanations.",
     rewrite:      "Rewrite the text inside <input> tags using different words. Same meaning, same length. Output ONLY the rewritten text, nothing else.",
     proofread:    "Fix ONLY spelling and punctuation errors in the text inside <input> tags. Do NOT rephrase, reword, or change any words. Do NOT add or remove content. Output ONLY the corrected text.",
     shorten:      "Remove filler words from the text inside <input> tags to make it shorter. Keep ALL the original information and every key word. Output ONLY the shortened text.",
@@ -174,8 +176,8 @@
   function isEditable(el) {
     if (!el) return false;
     const id = el.id;
-    if (id === "te-toolbar" || id === "te-suggest") return false;
-    if (el.closest && el.closest("#te-suggest, #te-toolbar")) return false;
+    if (id === "te-toolbar" || id === "te-suggest" || id === "te-caret-mirror") return false;
+    if (el.closest && el.closest("#te-suggest, #te-toolbar, #te-caret-mirror")) return false;
     if (el.isContentEditable) return true;
     const tag = el.tagName;
     if (tag === "TEXTAREA") return true;
@@ -273,81 +275,48 @@
     toolbar = document.createElement("div");
     toolbar.id = "te-toolbar";
 
-    // Primary action (Rewrite) is always visible and runs on a single click.
-    // Everything else lives behind the expand toggle, collapsed by default,
-    // so the toolbar doesn't sit there as a wide 5-button bar the whole time.
-    const [primary, ...rest] = ACTIONS;
-    toolbar.appendChild(makeActionBtn(primary));
+    // Smart Icon-Only Logo Toggle
+    const smartBtn = document.createElement("button");
+    smartBtn.id = "te-smart-btn";
+    smartBtn.className = "te-smart-btn";
+    smartBtn.dataset.type = "enhance";
+    smartBtn.title = "Mindscribe AI — Click to enhance text";
 
-    const expandBtn = document.createElement("button");
-    expandBtn.id = "te-expand-btn";
-    expandBtn.className = "te-action-btn te-expand-btn";
-    expandBtn.title = "More tools";
-    expandBtn.innerHTML = `<span class="te-btn-icon">${ICONS.chevron}</span>`;
-    expandBtn.addEventListener("mousedown", (e) => {
+    const logoImg = document.createElement("img");
+    logoImg.className = "te-btn-logo";
+    try {
+      logoImg.src = chrome.runtime.getURL("icons/icon48.png");
+    } catch (_) {
+      logoImg.src = "icons/icon48.png";
+    }
+    logoImg.alt = "Mindscribe AI";
+
+    smartBtn.appendChild(logoImg);
+
+    smartBtn.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
       e.preventDefault();
       e.stopPropagation();
-      const nowExpanded = toolbar.classList.toggle("te-expanded");
-      // Re-clamp so the wider expanded bar can't run off the right edge of the screen
-      if (nowExpanded) {
-        const r = toolbar.getBoundingClientRect();
-        if (r.right > window.innerWidth - 8) {
-          toolbar.style.left = Math.max(8, window.innerWidth - r.width - 8) + "px";
-        }
-      }
+      runAction("enhance");
     });
-    toolbar.appendChild(expandBtn);
-
-    const moreGroup = document.createElement("div");
-    moreGroup.id = "te-more-actions";
-    moreGroup.className = "te-more-actions";
-    rest.forEach((action) => moreGroup.appendChild(makeActionBtn(action)));
-
-    // Per-site auto-suggest toggle — lives in the "more" group too
-    const sep = document.createElement("div");
-    sep.style.cssText = "width:1px;height:16px;background:rgba(255,255,255,0.07);margin:0 2px;flex-shrink:0;";
-    moreGroup.appendChild(sep);
-
-    const siteToggle = document.createElement("button");
-    siteToggle.id = "te-site-toggle";
-    siteToggle.className = "te-action-btn";
-    siteToggle.style.padding = "5px 8px";
-    function updateSiteToggle() {
-      siteToggle.innerHTML = siteDisabled
-        ? `<span class="te-btn-icon">${ICONS.siteOff}</span>`
-        : `<span class="te-btn-icon">${ICONS.siteOn}</span>`;
-      siteToggle.title = siteDisabled
-        ? "Auto-suggest off for this site — click to enable"
-        : "Auto-suggest on — click to disable for this site";
-      siteToggle.style.opacity = siteDisabled ? "0.45" : "1";
-    }
-    updateSiteToggle();
-    siteToggle.addEventListener("mousedown", (e) => {
-      e.preventDefault(); e.stopPropagation();
-      siteDisabled = !siteDisabled;
-      updateSiteToggle();
-      try {
-        chrome.storage.local.get("te_disabled_sites", (r) => {
-          let sites = r.te_disabled_sites || [];
-          if (siteDisabled) { if (!sites.includes(window.location.hostname)) sites.push(window.location.hostname); }
-          else              { sites = sites.filter(s => s !== window.location.hostname); }
-          chrome.storage.local.set({ te_disabled_sites: sites });
-        });
-      } catch (_) {}
+    smartBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
     });
-    moreGroup.appendChild(siteToggle);
-    toolbar.appendChild(moreGroup);
 
-    // Drag to reposition
+    toolbar.appendChild(smartBtn);
+
+    // Drag to reposition (temporary manual adjustment)
     let tDrag = null;
     let tMoved = false;
     toolbar.addEventListener("mousedown", (e) => {
-      if (e.target.closest(".te-action-btn")) return; // don't drag when clicking buttons
+      if (e.target.closest("#te-smart-btn")) return; // don't drag when clicking the button
       e.preventDefault();
       const r = toolbar.getBoundingClientRect();
       tDrag  = { ox: e.clientX - r.left, oy: e.clientY - r.top };
       tMoved = false;
       toolbar.style.cursor = "grabbing";
+      toolbar.classList.add("te-dragging");
     });
     document.addEventListener("mousemove", (e) => {
       if (!tDrag) return;
@@ -362,23 +331,11 @@
       if (!tDrag) return;
       tDrag = null; tMoved = false;
       toolbar.style.cursor = "";
-      if (toolbarDragged) {
-        try {
-          chrome.storage.local.set({ te_toolbar_pos: { left: toolbar.style.left, top: toolbar.style.top } });
-        } catch (_) {}
-      }
+      toolbar.classList.remove("te-dragging");
     });
 
-    // Restore saved position
-    try {
-      chrome.storage.local.get("te_toolbar_pos", (r) => {
-        if (r.te_toolbar_pos?.left) {
-          toolbar.style.left = r.te_toolbar_pos.left;
-          toolbar.style.top  = r.te_toolbar_pos.top;
-          toolbarDragged     = true;
-        }
-      });
-    } catch (_) {}
+    // Clear any previously saved static position so toolbar dynamically follows text
+    try { chrome.storage.local.remove("te_toolbar_pos"); } catch (_) {}
 
     document.documentElement.appendChild(toolbar);
     return toolbar;
@@ -524,34 +481,282 @@
     if (result) { setText(el, result); scheduleFollowUp(el); }
   }
 
-  // Anchored to whatever field is truly focused right now (document.activeElement
-  // is the browser's own live focus state, so it can't go stale like a tracked
-  // reference can on sites with complex/rebuilt DOM). Positioned below the field's
-  // bottom edge rather than above its top — a compose box that grows taller as you
-  // type more lines expands its bottom edge, so anchoring there makes the toolbar
-  // follow along instead of staying frozen at the box's original height.
+  // ── Caret & Cursor Coordinate Tracking ────────────────────────────────────
+
+  const CARET_STYLE_PROPS = [
+    "direction", "boxSizing", "fontFamily", "fontSize", "fontSizeAdjust",
+    "fontStretch", "fontStyle", "fontVariant", "fontWeight", "letterSpacing",
+    "lineHeight", "textAlign", "textDecoration", "textIndent", "textTransform",
+    "wordBreak", "wordSpacing", "wordWrap", "overflowWrap", "tabSize"
+  ];
+
+  let caretMirror = null;
+  function getCaretMirror() {
+    if (caretMirror && caretMirror.parentNode) return caretMirror;
+    caretMirror = document.createElement("div");
+    caretMirror.id = "te-caret-mirror";
+    caretMirror.style.cssText = `
+      position: absolute !important;
+      top: -99999px !important;
+      left: -99999px !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
+      z-index: -9999 !important;
+    `;
+    (document.body || document.documentElement).appendChild(caretMirror);
+    return caretMirror;
+  }
+
+  function getInputOrTextareaCaret(el) {
+    if (!el) return null;
+    const isInput = el.tagName === "INPUT";
+    let pos = 0;
+    try {
+      pos = typeof el.selectionEnd === "number" ? el.selectionEnd : (el.value || "").length;
+    } catch (_) {
+      pos = (el.value || "").length;
+    }
+
+    const text = el.value || "";
+    const textBefore = text.slice(0, pos);
+    const textAfter  = text.slice(pos);
+
+    const mirror = getCaretMirror();
+    const style  = window.getComputedStyle(el);
+    const rect   = el.getBoundingClientRect();
+
+    mirror.style.boxSizing = style.boxSizing || "border-box";
+    mirror.style.width = isInput ? "auto" : (rect.width + "px");
+    mirror.style.height = "auto";
+    mirror.style.whiteSpace = isInput ? "pre" : "pre-wrap";
+    mirror.style.wordWrap = isInput ? "normal" : "break-word";
+    mirror.style.overflowWrap = isInput ? "normal" : "break-word";
+
+    for (let i = 0; i < CARET_STYLE_PROPS.length; i++) {
+      const prop = CARET_STYLE_PROPS[i];
+      mirror.style[prop] = style[prop];
+    }
+    mirror.style.paddingTop = style.paddingTop;
+    mirror.style.paddingRight = style.paddingRight;
+    mirror.style.paddingBottom = style.paddingBottom;
+    mirror.style.paddingLeft = style.paddingLeft;
+    mirror.style.borderTopWidth = style.borderTopWidth;
+    mirror.style.borderRightWidth = style.borderRightWidth;
+    mirror.style.borderBottomWidth = style.borderBottomWidth;
+    mirror.style.borderLeftWidth = style.borderLeftWidth;
+    mirror.style.borderStyle = style.borderStyle;
+
+    mirror.textContent = textBefore;
+    const marker = document.createElement("span");
+    marker.style.cssText = "display:inline !important;padding:0 !important;margin:0 !important;border:0 !important;";
+    if (textAfter.length > 0) {
+      marker.textContent = textAfter[0];
+    } else if (textBefore.endsWith("\n")) {
+      marker.textContent = "\uFEFF";
+    } else {
+      marker.textContent = "\u200B";
+    }
+    mirror.appendChild(marker);
+    if (textAfter.length > 1) {
+      mirror.appendChild(document.createTextNode(textAfter.slice(1)));
+    }
+
+    const markerRect = marker.getBoundingClientRect();
+    const mirrorRect = mirror.getBoundingClientRect();
+
+    const relX = markerRect.left - mirrorRect.left;
+    const relY = markerRect.top - mirrorRect.top;
+
+    const caretX = rect.left + relX - (el.scrollLeft || 0);
+    const caretY = rect.top + relY - (el.scrollTop || 0);
+    const caretHeight = markerRect.height || parseFloat(style.lineHeight) || (parseFloat(style.fontSize) * 1.2) || 18;
+
+    return {
+      left: caretX,
+      right: caretX,
+      top: caretY,
+      bottom: caretY + caretHeight,
+      height: caretHeight
+    };
+  }
+
+  function getContentEditableCaret(el) {
+    if (!el) return null;
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+    const range = sel.getRangeAt(0);
+
+    if (!el.contains(range.startContainer) && el !== range.startContainer) {
+      return null;
+    }
+
+    // 1. Direct getClientRects
+    try {
+      const rects = range.getClientRects();
+      if (rects && rects.length > 0) {
+        const r = rects[rects.length - 1];
+        if (r.top || r.bottom || r.left || r.right) {
+          const h = r.height || (r.bottom - r.top) || 18;
+          return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, height: h };
+        }
+      }
+    } catch (_) {}
+
+    // 2. getBoundingClientRect
+    try {
+      const b = range.getBoundingClientRect();
+      if (b && (b.top || b.bottom || b.left || b.right)) {
+        const h = b.height || (b.bottom - b.top) || 18;
+        return { left: b.left, right: b.right, top: b.top, bottom: b.bottom, height: h };
+      }
+    } catch (_) {}
+
+    // 3. Sub-range character measurement (non-invasive)
+    try {
+      const node = range.startContainer;
+      const offset = range.startOffset;
+      if (node.nodeType === Node.TEXT_NODE && node.nodeValue.length > 0) {
+        const subRange = document.createRange();
+        if (offset > 0) {
+          subRange.setStart(node, offset - 1);
+          subRange.setEnd(node, offset);
+          const sr = subRange.getClientRects();
+          if (sr && sr.length > 0) {
+            const r = sr[sr.length - 1];
+            const h = r.height || (r.bottom - r.top) || 18;
+            return { left: r.right, right: r.right, top: r.top, bottom: r.bottom, height: h };
+          }
+        } else {
+          subRange.setStart(node, 0);
+          subRange.setEnd(node, Math.min(1, node.nodeValue.length));
+          const sr = subRange.getClientRects();
+          if (sr && sr.length > 0) {
+            const r = sr[0];
+            const h = r.height || (r.bottom - r.top) || 18;
+            return { left: r.left, right: r.left, top: r.top, bottom: r.bottom, height: h };
+          }
+        }
+      } else if (node.nodeType === Node.ELEMENT_NODE && node.childNodes.length > 0) {
+        const targetChild = node.childNodes[Math.max(0, offset - 1)];
+        if (targetChild && targetChild.nodeType === Node.ELEMENT_NODE) {
+          const cr = targetChild.getBoundingClientRect();
+          if (cr.top || cr.bottom || cr.left || cr.right) {
+            const h = cr.height || (cr.bottom - cr.top) || 18;
+            return { left: cr.right, right: cr.right, top: cr.top, bottom: cr.bottom, height: h };
+          }
+        }
+      }
+    } catch (_) {}
+
+    // 4. TreeWalker to find last text node
+    try {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
+      let lastNode = null;
+      while (walker.nextNode()) {
+        if (walker.currentNode.nodeValue && walker.currentNode.nodeValue.trim().length > 0) {
+          lastNode = walker.currentNode;
+        }
+      }
+      if (lastNode) {
+        const r = document.createRange();
+        r.selectNodeContents(lastNode);
+        r.collapse(false);
+        const rects = r.getClientRects();
+        if (rects && rects.length > 0) {
+          const lastRect = rects[rects.length - 1];
+          const h = lastRect.height || (lastRect.bottom - lastRect.top) || 18;
+          return { left: lastRect.right, right: lastRect.right, top: lastRect.top, bottom: lastRect.bottom, height: h };
+        }
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  function getCaretCoordinates(el) {
+    if (!el) return null;
+    try {
+      if (el.isContentEditable) return getContentEditableCaret(el);
+      if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") return getInputOrTextareaCaret(el);
+      if (document.activeElement && document.activeElement !== el && isEditable(document.activeElement)) {
+        return getCaretCoordinates(document.activeElement);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  let _posRaf = null;
+  function schedulePositionToolbar(el) {
+    if (_posRaf) cancelAnimationFrame(_posRaf);
+    _posRaf = requestAnimationFrame(() => {
+      _posRaf = null;
+      const target = el || focused || (isEditable(document.activeElement) ? document.activeElement : null);
+      if (target) positionToolbar(target);
+    });
+  }
+
+  // Dynamic positioning: keeps toolbar showing just next to the text being written
+  // and smoothly follows the cursor / text movement across all websites.
   function positionToolbar(el, anchorEl) {
     const t = getToolbar();
     const s = getSrBtn();
 
     const live = isEditable(document.activeElement) ? document.activeElement : (anchorEl || el);
+    if (!live) return;
 
     // Rewrite/Proofread/etc act on existing text — nothing to show for an empty field.
     // Smart Reply is unaffected: it drafts a NEW reply from conversation context,
     // so it stays available even when the compose box itself is empty.
-    const hasText = getText(el).trim().length > 0;
+    const text = getText(el).trim();
+    const hasText = text.length > 0;
     if (CFG.showTrigger && hasText)      t.style.display = "flex";
     else                                 t.style.display = "none";
     if (CFG.srEnabled && isChatSite())  s.style.display = "flex";
     else                                s.style.display = "none";
 
     const fieldRect = live.getBoundingClientRect();
-    if (!toolbarDragged && hasText) {
-      t.style.top  = Math.min(fieldRect.bottom + 6, window.innerHeight - 46) + "px";
-      t.style.left = Math.max(8, Math.min(fieldRect.left, window.innerWidth - 280)) + "px";
-    }
     s.style.top  = Math.max(4, fieldRect.bottom - 34) + "px";
     s.style.left = Math.max(4, fieldRect.right  - 34) + "px";
+
+    if (!hasText || toolbarDragged) return;
+
+    const tRect   = t.getBoundingClientRect();
+    const tWidth  = tRect.width  || 30;
+    const tHeight = tRect.height || 30;
+
+    const caret = getCaretCoordinates(live) || getCaretCoordinates(anchorEl) || getCaretCoordinates(el);
+
+    if (caret) {
+      // Primary: place with comfortable clearance away from cursor (+14px right, elevated -6px)
+      // so it never blocks or contradicts the cursor while typing, leaving writing 100% clear.
+      let targetLeft = caret.right + 14;
+      let targetTop  = caret.top - (tHeight - caret.height) / 2 - 6;
+
+      // If placing to the right overflows the viewport or is too close to the right edge:
+      // Flip to position directly below the caret line
+      if (targetLeft + tWidth > window.innerWidth - 8) {
+        targetTop  = caret.bottom + 8;
+        targetLeft = Math.max(8, Math.min(caret.left, window.innerWidth - tWidth - 8));
+      }
+
+      // If placing above would overflow top of viewport, flip to below
+      if (targetTop < 8) {
+        targetTop = caret.bottom + 8;
+      }
+
+      // Final clamping within viewport
+      targetLeft = Math.max(8, Math.min(targetLeft, window.innerWidth - tWidth - 8));
+      targetTop  = Math.max(8, Math.min(targetTop, window.innerHeight - tHeight - 8));
+
+      t.style.left = Math.round(targetLeft) + "px";
+      t.style.top  = Math.round(targetTop) + "px";
+    } else {
+      // Fallback if caret coordinates cannot be obtained
+      const fallbackTop  = Math.max(8, fieldRect.top - tHeight - 4);
+      const fallbackLeft = Math.max(8, Math.min(fieldRect.right - tWidth - 8, window.innerWidth - tWidth - 8));
+      t.style.left = Math.round(fallbackLeft) + "px";
+      t.style.top  = Math.round(fallbackTop) + "px";
+    }
   }
 
   function hideToolbar() {
@@ -677,7 +882,7 @@
     suggest.style.width = _suggestWidth(el) + "px";
   }
 
-  const ACTION_LABELS = { proofread: "Proofread", shorten: "Shorten", rewrite: "Rewrite", professional: "Professional", clean: "Clean" };
+  const ACTION_LABELS = { enhance: "Smart Enhance", proofread: "Proofread", shorten: "Shorten", rewrite: "Rewrite", professional: "Professional", clean: "Clean" };
 
   function showSuggestLoading(el, action) {
     suggestFor = el;
@@ -787,19 +992,21 @@
 
   function resetToolbarBtns() {
     if (!toolbar) return;
-    ACTIONS.forEach(({ label, type, icon }) => {
-      const btn = toolbar.querySelector(`[data-type="${type}"]`);
-      if (!btn) return;
+    const btn = toolbar.querySelector("#te-smart-btn") || toolbar.querySelector(`[data-type="enhance"]`);
+    if (btn) {
       btn.disabled = false;
+      btn.classList.remove("te-loading");
       btn.innerHTML = "";
-      const iconEl = document.createElement("span");
-      iconEl.className = "te-btn-icon";
-      iconEl.innerHTML = icon;
-      const labelEl = document.createElement("span");
-      labelEl.textContent = label;
-      btn.appendChild(iconEl);
-      btn.appendChild(labelEl);
-    });
+      const logoImg = document.createElement("img");
+      logoImg.className = "te-btn-logo";
+      try {
+        logoImg.src = chrome.runtime.getURL("icons/icon48.png");
+      } catch (_) {
+        logoImg.src = "icons/icon48.png";
+      }
+      logoImg.alt = "Mindscribe AI";
+      btn.appendChild(logoImg);
+    }
   }
 
 
@@ -904,7 +1111,7 @@
             options: getOllamaOptions(type, text),
             messages: [
               { role: "system", content: getSystemMsg(type, text) },
-              ...SHOTS[type],
+              ...(SHOTS[type] || []),
               { role: "user", content: `<input>${text}</input>` },
             ],
           },
@@ -1002,9 +1209,9 @@
     return false;
   }
 
-  // Auto-suggest always proofreads — never auto-shortens
+  // Auto-suggest uses Smart Enhance — detects tone and fixes errors
   function pickAction(text) {
-    return "proofread";
+    return "enhance";
   }
 
   // Returns true if suggestion is too similar to original to be worth showing
@@ -1048,15 +1255,19 @@
       if (chrome.runtime.lastError) onError("Reload page and retry");
     });
 
-    port.postMessage({
-      model: CFG.modelSelect || MODEL,
-      messages: [
-        { role: "system", content: getSystemMsg(type, text) },
-        ...SHOTS[type],
-        { role: "user", content: `<input>${text}</input>` },
-      ],
-      options: getOllamaOptions(type, text),
-    });
+    try {
+      port.postMessage({
+        model: CFG.modelSelect || MODEL,
+        messages: [
+          { role: "system", content: getSystemMsg(type, text) },
+          ...(SHOTS[type] || []),
+          { role: "user", content: `<input>${text}</input>` },
+        ],
+        options: getOllamaOptions(type, text),
+      });
+    } catch (e) {
+      onError(e.message || "Failed to start enhancement");
+    }
 
     return port;
   }
@@ -1657,39 +1868,42 @@
 
   // ── Action ────────────────────────────────────────────────────────────────
 
-  function runAction(type) {
-    const el = focused || lastFocused;
+  function runAction(type = "enhance") {
+    const el = focused || lastFocused || (isEditable(document.activeElement) ? editableRoot(document.activeElement) : null);
+    if (!el) return;
     const text = getText(el).trim();
     if (!text) return;
 
     const t = getToolbar();
-    const btn = t.querySelector(`[data-type="${type}"]`);
+    const btn = t.querySelector("#te-smart-btn") || t.querySelector(`[data-type="${type}"]`);
     if (!btn) return;
-    t.querySelectorAll(".te-action-btn").forEach(b => (b.disabled = true));
-    btn.innerHTML = '<span class="te-btn-icon">⏳</span><span>Working…</span>';
+    btn.disabled = true;
+    btn.classList.add("te-loading");
 
     undoStack.push({ el, text });
     if (undoStack.length > 5) undoStack.shift();
 
     // Stream tokens straight into the field as they arrive instead of waiting
-    // for the full response — makes Rewrite/Proofread/etc feel instant.
+    // for the full response — makes Smart Enhance feel instant.
     streamOllama(
       text,
-      type,
-      (partial) => setTextLive(el, partial),
+      type || "enhance",
+      (partial) => {
+        setTextLive(el, partial);
+        schedulePositionToolbar(el);
+      },
       (finalText) => {
         setText(el, finalText);
         resetToolbarBtns();
-        trackUsage(type);
+        trackUsage(type || "enhance");
+        schedulePositionToolbar(el);
       },
       (errMsg) => {
+        console.warn("[Mindscribe] Enhance error:", errMsg);
         resetToolbarBtns();
-        const errBtn = t.querySelector(`[data-type="${type}"]`);
+        const errBtn = t.querySelector("#te-smart-btn") || t.querySelector(`[data-type="${type}"]`);
         if (errBtn) {
-          errBtn.innerHTML = "";
-          const ic = document.createElement("span"); ic.className = "te-btn-icon"; ic.textContent = "⚠️";
-          const lb = document.createElement("span"); lb.textContent = errMsg;
-          errBtn.appendChild(ic); errBtn.appendChild(lb);
+          errBtn.innerHTML = '<span style="font-size:16px;">⚠️</span>';
         }
         setTimeout(resetToolbarBtns, 2500);
       }
@@ -1712,6 +1926,7 @@
     if (!isEditable(el)) return;
     if (srStreaming) return; // don't interfere while smart reply is streaming
     focused = el; lastFocused = el;
+    toolbarDragged = false; // typing always resumes tracking text position
 
     clearTimeout(typingTimer);
     clearTimeout(suggestTimer);
@@ -1777,23 +1992,37 @@
   // Capture phase so LinkedIn/modal sites can't stop propagation before we see the event
   document.addEventListener("input",          onInput,                              { capture: true });
   document.addEventListener("keyup",          (e) => {
+    const navKeys = ["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Home","End","PageUp","PageDown"];
+    if (navKeys.includes(e.key)) {
+      if (focused || isEditable(document.activeElement)) {
+        schedulePositionToolbar(focused || document.activeElement);
+      }
+      return;
+    }
     const ignore = ["Shift","Control","Alt","Meta","CapsLock","Tab","Escape",
-                    "ArrowLeft","ArrowRight","ArrowUp","ArrowDown",
-                    "Home","End","PageUp","PageDown","F1","F2","F3","F4",
-                    "F5","F6","F7","F8","F9","F10","F11","F12"];
+                    "F1","F2","F3","F4","F5","F6","F7","F8","F9","F10","F11","F12"];
     if (!ignore.includes(e.key)) onInput(e);
   },                                                                                { capture: true });
   document.addEventListener("paste",          (e) => setTimeout(() => onInput(e), 50), { capture: true });
   document.addEventListener("compositionend", onInput,                              { capture: true });
 
+  // Real-time caret tracking: whenever selection or cursor moves anywhere
+  document.addEventListener("selectionchange", () => {
+    const active = document.activeElement;
+    if (isEditable(active) || focused) {
+      schedulePositionToolbar(focused || active);
+    }
+  });
+
   // Capture phase: fires before LinkedIn/modal stopPropagation
   document.addEventListener("click", (e) => {
     if (!isEditable(e.target)) return;
     const el = editableRoot(e.target);
-    if (focused === el) return;
+    const wasFocused = (focused === el);
     focused = el; lastFocused = el;
-    positionToolbar(el, e.target);
-    watchFocusedEl(el);
+    toolbarDragged = false; // clicking inside input resumes following text
+    schedulePositionToolbar(el);
+    if (!wasFocused) watchFocusedEl(el);
   }, { capture: true });
 
   // MutationObserver fallback: watch focused element's text content for changes
@@ -1814,6 +2043,7 @@
     if (!isEditable(e.target)) return;
     const el = editableRoot(e.target);
     focused = el; lastFocused = el;
+    toolbarDragged = false;
     positionToolbar(el, e.target);
     watchFocusedEl(el);
   }, { capture: true });
@@ -1834,12 +2064,17 @@
     }, 200);
   });
 
+  // Listen to both window and document scroll (with capture) so scrolled textareas / containers reposition toolbar
+  document.addEventListener("scroll", () => {
+    if (focused) { schedulePositionToolbar(focused); positionSuggest(focused); }
+  }, { capture: true, passive: true });
+
   window.addEventListener("scroll", () => {
-    if (focused) { positionToolbar(focused); positionSuggest(focused); }
+    if (focused) { schedulePositionToolbar(focused); positionSuggest(focused); }
   }, { passive: true });
 
   window.addEventListener("resize", () => {
-    if (focused) { positionToolbar(focused); positionSuggest(focused); }
+    if (focused) { schedulePositionToolbar(focused); positionSuggest(focused); }
   }, { passive: true });
 
   document.addEventListener("mousedown", (e) => {
