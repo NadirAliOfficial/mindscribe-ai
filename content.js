@@ -4,8 +4,6 @@
   // Don't run inside our own extension pages
   if (window.location.protocol === "chrome-extension:") return;
 
-  console.log("%c[TE] BUILD CHECK — content.js loaded fresh, positioning v5 (activeElement-based)", "background:red;color:white;font-size:16px;padding:4px;");
-
   const MODEL = "openai/gpt-oss-120b";
 
   const ICONS = {
@@ -290,7 +288,6 @@
       e.preventDefault();
       e.stopPropagation();
       const nowExpanded = toolbar.classList.toggle("te-expanded");
-      console.log("[TE] expand clicked, now expanded:", nowExpanded);
       // Re-clamp so the wider expanded bar can't run off the right edge of the screen
       if (nowExpanded) {
         const r = toolbar.getBoundingClientRect();
@@ -527,23 +524,17 @@
     if (result) { setText(el, result); scheduleFollowUp(el); }
   }
 
-  // Simple, predictable placement: fixed just above whatever field is truly
-  // focused right now. Trust document.activeElement directly instead of `el`/
-  // `anchorEl` — those are tracked references captured at some earlier event
-  // and can go stale or point at the wrong element on sites with complex
-  // nested/rebuilt DOM (confirmed wrong on Fiverr and a LinkedIn-style inbox).
-  // document.activeElement is the browser's own live focus state — it cannot
-  // be stale, since it's read fresh every time this function runs.
+  // Anchored to whatever field is truly focused right now (document.activeElement
+  // is the browser's own live focus state, so it can't go stale like a tracked
+  // reference can on sites with complex/rebuilt DOM). Positioned below the field's
+  // bottom edge rather than above its top — a compose box that grows taller as you
+  // type more lines expands its bottom edge, so anchoring there makes the toolbar
+  // follow along instead of staying frozen at the box's original height.
   function positionToolbar(el, anchorEl) {
     const t = getToolbar();
     const s = getSrBtn();
 
     const live = isEditable(document.activeElement) ? document.activeElement : (anchorEl || el);
-    console.log("[TE] positionToolbar CALLED at", new Date().toISOString().slice(11, 19),
-      "| el:", el?.tagName, el?.className?.toString().slice(0, 40),
-      "| document.activeElement:", document.activeElement?.tagName, document.activeElement?.className?.toString().slice(0, 40),
-      "| using 'live':", live === document.activeElement ? "activeElement" : (live === anchorEl ? "anchorEl" : "el-fallback"),
-      "| live rect:", JSON.stringify(live?.getBoundingClientRect?.()));
 
     // Rewrite/Proofread/etc act on existing text — nothing to show for an empty field.
     // Smart Reply is unaffected: it drafts a NEW reply from conversation context,
@@ -556,15 +547,8 @@
 
     const fieldRect = live.getBoundingClientRect();
     if (!toolbarDragged && hasText) {
-      t.style.top  = Math.max(4, fieldRect.top - 40) + "px"; // just above the field, fixed
+      t.style.top  = Math.min(fieldRect.bottom + 6, window.innerHeight - 46) + "px";
       t.style.left = Math.max(8, Math.min(fieldRect.left, window.innerWidth - 280)) + "px";
-      // Verify what actually got rendered, in case something else (CSS transform,
-      // another script, a stale cached element) moves it after we set it.
-      requestAnimationFrame(() => {
-        console.log("[TE] toolbar ACTUAL rendered rect:", JSON.stringify(t.getBoundingClientRect()),
-          "| toolbar.style.top/left set to:", t.style.top, t.style.left,
-          "| window.innerWidth/innerHeight:", window.innerWidth, window.innerHeight);
-      });
     }
     s.style.top  = Math.max(4, fieldRect.bottom - 34) + "px";
     s.style.left = Math.max(4, fieldRect.right  - 34) + "px";
@@ -1725,7 +1709,6 @@
   let suggestTimer = null;
 
   function handleTyping(el, anchorEl) {
-    console.log("[TE] handleTyping ENTERED | el:", el?.tagName, "| isEditable(el):", isEditable(el), "| srStreaming:", srStreaming);
     if (!isEditable(el)) return;
     if (srStreaming) return; // don't interfere while smart reply is streaming
     focused = el; lastFocused = el;
