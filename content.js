@@ -558,6 +558,13 @@
     if (!toolbarDragged && hasText) {
       t.style.top  = Math.max(4, fieldRect.top - 40) + "px"; // just above the field, fixed
       t.style.left = Math.max(8, Math.min(fieldRect.left, window.innerWidth - 280)) + "px";
+      // Verify what actually got rendered, in case something else (CSS transform,
+      // another script, a stale cached element) moves it after we set it.
+      requestAnimationFrame(() => {
+        console.log("[TE] toolbar ACTUAL rendered rect:", JSON.stringify(t.getBoundingClientRect()),
+          "| toolbar.style.top/left set to:", t.style.top, t.style.left,
+          "| window.innerWidth/innerHeight:", window.innerWidth, window.innerHeight);
+      });
     }
     s.style.top  = Math.max(4, fieldRect.bottom - 34) + "px";
     s.style.left = Math.max(4, fieldRect.right  - 34) + "px";
