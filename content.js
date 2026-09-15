@@ -14,6 +14,7 @@
     clean:        `<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8.086 2.207a2 2 0 0 1 2.828 0l3.879 3.879a2 2 0 0 1 0 2.828l-5.5 5.5A2 2 0 0 1 7.879 15H5.12a2 2 0 0 1-1.414-.586l-2.5-2.5a2 2 0 0 1 0-2.828l6.879-6.879zm.66 11.34L3.453 8.254 1.914 9.793a1 1 0 0 0 0 1.414l2.5 2.5a1 1 0 0 0 .707.293H7.88a1 1 0 0 0 .707-.293l.16-.16z"/></svg>`,
     siteOn:       `<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M7 5H3a3 3 0 0 0 0 6h4a4.995 4.995 0 0 1-.584-1H3a2 2 0 1 1 0-4h3.416c.156-.357.352-.692.584-1z"/><path d="M16 8A5 5 0 1 1 6 8a5 5 0 0 1 10 0z"/></svg>`,
     siteOff:      `<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M9 5H5a5 5 0 0 0 0 10h4a4.994 4.994 0 0 0 2.584-1H5a4 4 0 1 1 0-8h6.584A4.992 4.992 0 0 0 9 5z"/></svg>`,
+    chevron:      `<svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M4.646 6.646a.5.5 0 0 1 .708 0L8 9.293l2.646-2.647a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708 0l-3-3a.5.5 0 0 1 0-.708z"/></svg>`,
   };
 
   const ACTIONS = [
@@ -31,7 +32,7 @@
   // ── Live settings (synced in real-time via storage.onChanged) ───────────
   const CFG = {
     autoSuggest:     true,
-    suggestDelay:    1500,
+    suggestDelay:    1000,
     minLength:       8,
     showTrigger:     true,
     notifications:   true,
@@ -247,35 +248,58 @@
 
   // ── Action toolbar ────────────────────────────────────────────────────────
 
+  function makeActionBtn({ label, type, icon, desc }) {
+    const btn = document.createElement("button");
+    btn.className = "te-action-btn";
+    btn.dataset.type = type;
+    btn.title = desc || label;
+    const iconEl = document.createElement("span");
+    iconEl.className = "te-btn-icon";
+    iconEl.innerHTML = icon;
+    const labelEl = document.createElement("span");
+    labelEl.textContent = label;
+    btn.appendChild(iconEl);
+    btn.appendChild(labelEl);
+    btn.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      runAction(type);
+    });
+    return btn;
+  }
+
   function getToolbar() {
     if (toolbar) return toolbar;
     toolbar = document.createElement("div");
     toolbar.id = "te-toolbar";
 
-    ACTIONS.forEach(({ label, type, icon, desc }) => {
-      const btn = document.createElement("button");
-      btn.className = "te-action-btn";
-      btn.dataset.type = type;
-      btn.title = desc || label;
-      const iconEl = document.createElement("span");
-      iconEl.className = "te-btn-icon";
-      iconEl.innerHTML = icon;
-      const labelEl = document.createElement("span");
-      labelEl.textContent = label;
-      btn.appendChild(iconEl);
-      btn.appendChild(labelEl);
-      btn.addEventListener("mousedown", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        runAction(type);
-      });
-      toolbar.appendChild(btn);
-    });
+    // Primary action (Rewrite) is always visible and runs on a single click.
+    // Everything else lives behind the expand toggle, collapsed by default,
+    // so the toolbar doesn't sit there as a wide 5-button bar the whole time.
+    const [primary, ...rest] = ACTIONS;
+    toolbar.appendChild(makeActionBtn(primary));
 
-    // Per-site auto-suggest toggle
+    const expandBtn = document.createElement("button");
+    expandBtn.id = "te-expand-btn";
+    expandBtn.className = "te-action-btn te-expand-btn";
+    expandBtn.title = "More tools";
+    expandBtn.innerHTML = `<span class="te-btn-icon">${ICONS.chevron}</span>`;
+    expandBtn.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toolbar.classList.toggle("te-expanded");
+    });
+    toolbar.appendChild(expandBtn);
+
+    const moreGroup = document.createElement("div");
+    moreGroup.id = "te-more-actions";
+    moreGroup.className = "te-more-actions";
+    rest.forEach((action) => moreGroup.appendChild(makeActionBtn(action)));
+
+    // Per-site auto-suggest toggle — lives in the "more" group too
     const sep = document.createElement("div");
     sep.style.cssText = "width:1px;height:16px;background:rgba(255,255,255,0.07);margin:0 2px;flex-shrink:0;";
-    toolbar.appendChild(sep);
+    moreGroup.appendChild(sep);
 
     const siteToggle = document.createElement("button");
     siteToggle.id = "te-site-toggle";
@@ -304,7 +328,8 @@
         });
       } catch (_) {}
     });
-    toolbar.appendChild(siteToggle);
+    moreGroup.appendChild(siteToggle);
+    toolbar.appendChild(moreGroup);
 
     // Drag to reposition
     let tDrag = null;
@@ -1627,7 +1652,7 @@
 
   // ── Action ────────────────────────────────────────────────────────────────
 
-  async function runAction(type) {
+  function runAction(type) {
     const el = focused || lastFocused;
     const text = getText(el).trim();
     if (!text) return;
@@ -1638,24 +1663,32 @@
     t.querySelectorAll(".te-action-btn").forEach(b => (b.disabled = true));
     btn.innerHTML = '<span class="te-btn-icon">⏳</span><span>Working…</span>';
 
-    try {
-      const result = await callOllama(text, type);
-      undoStack.push({ el, text });
-      if (undoStack.length > 5) undoStack.shift();
-      setText(el, result);
-      resetToolbarBtns();
-      trackUsage(type);
-    } catch (err) {
-      resetToolbarBtns();
-      const errBtn = t.querySelector(`[data-type="${type}"]`);
-      if (errBtn) {
-        errBtn.innerHTML = "";
-        const ic = document.createElement("span"); ic.className = "te-btn-icon"; ic.textContent = "⚠️";
-        const lb = document.createElement("span"); lb.textContent = err.message;
-        errBtn.appendChild(ic); errBtn.appendChild(lb);
+    undoStack.push({ el, text });
+    if (undoStack.length > 5) undoStack.shift();
+
+    // Stream tokens straight into the field as they arrive instead of waiting
+    // for the full response — makes Rewrite/Proofread/etc feel instant.
+    streamOllama(
+      text,
+      type,
+      (partial) => setTextLive(el, partial),
+      (finalText) => {
+        setText(el, finalText);
+        resetToolbarBtns();
+        trackUsage(type);
+      },
+      (errMsg) => {
+        resetToolbarBtns();
+        const errBtn = t.querySelector(`[data-type="${type}"]`);
+        if (errBtn) {
+          errBtn.innerHTML = "";
+          const ic = document.createElement("span"); ic.className = "te-btn-icon"; ic.textContent = "⚠️";
+          const lb = document.createElement("span"); lb.textContent = errMsg;
+          errBtn.appendChild(ic); errBtn.appendChild(lb);
+        }
+        setTimeout(resetToolbarBtns, 2500);
       }
-      setTimeout(resetToolbarBtns, 2500);
-    }
+    );
   }
 
   function trackUsage(type) {
@@ -1726,7 +1759,7 @@
             }
           }
         );
-      }, Number(CFG.suggestDelay) || 1500);
+      }, Number(CFG.suggestDelay) || 1000);
     }
   }
 

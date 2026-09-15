@@ -39,6 +39,24 @@
   font-family: inherit;
 }
 
+/* Expand toggle — small, icon-only, rotates when the "more" group opens */
+.te-expand-btn {
+  padding: 6px 7px;
+  transition: transform 0.15s, background 0.13s, color 0.13s, border-color 0.13s;
+}
+#te-toolbar.te-expanded .te-expand-btn { transform: rotate(180deg); color: #4ade80; }
+
+/* Collapsed by default — only the primary action + expand toggle show until clicked */
+.te-more-actions {
+  display: none;
+  align-items: center;
+  gap: 4px;
+}
+#te-toolbar.te-expanded .te-more-actions {
+  display: flex;
+  animation: te-fadein 0.14s cubic-bezier(0.16,1,0.3,1);
+}
+
 .te-action-btn:hover {
   background: #1a3d2b;
   border-color: #2a6e47;

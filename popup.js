@@ -1,7 +1,7 @@
 // ── Defaults ──────────────────────────────────────────────────────────────────
 const DEFAULTS = {
   autoSuggest:     true,
-  suggestDelay:    1500,
+  suggestDelay:    1000,
   minLength:       8,
   showTrigger:     true,
   notifications:   true,
@@ -257,7 +257,7 @@ function renderAll() {
       b.classList.toggle("active", b.dataset.val === String(val));
     });
   }
-  setRadio("suggestDelay",    String(settings.suggestDelay || 1500));
+  setRadio("suggestDelay",    String(settings.suggestDelay || 1000));
   setRadio("replyLength",     settings.replyLength    || "auto");
   setRadio("replyTone",       settings.replyTone      || "auto");
   setRadio("followUpHours",   String(settings.followUpHours || 24));
