@@ -586,10 +586,16 @@
   function positionToolbar(el) {
     const t = getToolbar();
     const s = getSrBtn();
-    if (CFG.showTrigger)                t.style.display = "flex";
+
+    // Rewrite/Proofread/etc act on existing text — nothing to show for an empty field.
+    // Smart Reply is unaffected: it drafts a NEW reply from conversation context,
+    // so it stays available even when the compose box itself is empty.
+    const hasText = getText(el).trim().length > 0;
+    if (CFG.showTrigger && hasText)      t.style.display = "flex";
+    else                                 t.style.display = "none";
     if (CFG.srEnabled && isChatSite())  s.style.display = "flex";
     else                                s.style.display = "none";
-    if (!toolbarDragged) {
+    if (!toolbarDragged && hasText) {
       const r = getCaretRect(el);
       t.style.top  = Math.min(r.bottom + 6, window.innerHeight - 46) + "px";
       t.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 280)) + "px";
