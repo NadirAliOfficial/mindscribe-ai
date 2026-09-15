@@ -9,7 +9,7 @@
   gap: 4px;
   padding: 5px 6px;
   background: #0d0d0d;
-  border: 1px solid rgba(108, 71, 255, 0.28);
+  border: 3px solid lime; /* TEMP build-check marker — remove once positioning is confirmed working */
   border-radius: 14px;
   box-shadow:
     0 0 0 1px rgba(108, 71, 255, 0.07),

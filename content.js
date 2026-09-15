@@ -4,6 +4,8 @@
   // Don't run inside our own extension pages
   if (window.location.protocol === "chrome-extension:") return;
 
+  console.log("%c[TE] BUILD CHECK — content.js loaded fresh, positioning v5 (activeElement-based)", "background:red;color:white;font-size:16px;padding:4px;");
+
   const MODEL = "openai/gpt-oss-120b";
 
   const ICONS = {
