@@ -10,20 +10,10 @@ const DEFAULTS = {
   replyTone:       "auto",
   followUp:        true,
   followUpHours:   24,
-  shortenStrength: "medium",
-  translateTarget: "auto",
-  customDefault:   "Make this text more concise and impactful.",
-  disabledActions: [],
   apiKey:          "",
   modelSelect:     "openai/gpt-oss-120b",
   temperature:     3,
   modelBackend:    "groq",
-};
-
-const ACTIONS = ["improve","rewrite","proofread","shorten","professional","friendly","translate","custom"];
-const ACTION_LABELS = {
-  improve:"Improve", rewrite:"Rewrite", proofread:"Proofread", shorten:"Shorten",
-  professional:"Professional", friendly:"Friendly", translate:"Translate", custom:"Custom"
 };
 
 let settings = { ...DEFAULTS };
@@ -34,16 +24,14 @@ function scheduleSave() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     chrome.storage.local.set({
-      te_settings:    settings,
-      te_custom_prompt: settings.customDefault,
+      te_settings: settings,
     }, () => showToast("✓ Applied"));
   }, 400);
 }
 
 // ── Load settings ─────────────────────────────────────────────────────────────
-chrome.storage.local.get(["te_settings", "te_custom_prompt", "te_api_keys"], (r) => {
+chrome.storage.local.get(["te_settings", "te_api_keys"], (r) => {
   if (r.te_settings)      settings = { ...DEFAULTS, ...r.te_settings };
-  if (r.te_custom_prompt) settings.customDefault = r.te_custom_prompt;
   if (r.te_api_keys)      settings.apiKeys = r.te_api_keys;
   renderAll();
 });
@@ -75,7 +63,6 @@ initRadioGroup("suggestDelay",    "suggestDelay");
 initRadioGroup("replyLength",     "replyLength");
 initRadioGroup("replyTone",       "replyTone");
 initRadioGroup("followUpHours",   "followUpHours");
-initRadioGroup("shortenStrength", "shortenStrength");
 initRadioGroup("modelBackend",    "modelBackend");
 
 // ── Toggles ───────────────────────────────────────────────────────────────────
@@ -103,14 +90,8 @@ tempSlider?.addEventListener("input", () => {
 });
 
 // ── Selects & text inputs ─────────────────────────────────────────────────────
-document.getElementById("translateTarget")?.addEventListener("change", (e) => {
-  settings.translateTarget = e.target.value; scheduleSave();
-});
 document.getElementById("modelSelect")?.addEventListener("change", (e) => {
   settings.modelSelect = e.target.value; scheduleSave();
-});
-document.getElementById("customDefault")?.addEventListener("input", (e) => {
-  settings.customDefault = e.target.value; scheduleSave();
 });
 
 // ── 3 API key slots ───────────────────────────────────────────────────────────
@@ -145,34 +126,6 @@ document.querySelectorAll(".eye-btn").forEach(btn => {
     if (inp) inp.type = inp.type === "password" ? "text" : "password";
   });
 });
-
-// ── Action toggles ────────────────────────────────────────────────────────────
-function buildActionToggles() {
-  const container = document.getElementById("actionToggles");
-  if (!container) return;
-  container.innerHTML = "";
-  ACTIONS.forEach(action => {
-    const isEnabled = !settings.disabledActions.includes(action);
-    const item = document.createElement("div");
-    item.className = "action-item";
-    item.innerHTML = `
-      <span class="action-item-label">${ACTION_LABELS[action]}</span>
-      <label class="toggle">
-        <input type="checkbox" ${isEnabled ? "checked" : ""}>
-        <div class="toggle-track"></div>
-        <div class="toggle-thumb"></div>
-      </label>`;
-    item.querySelector("input").addEventListener("change", (e) => {
-      if (e.target.checked) {
-        settings.disabledActions = settings.disabledActions.filter(a => a !== action);
-      } else {
-        if (!settings.disabledActions.includes(action)) settings.disabledActions.push(action);
-      }
-      scheduleSave();
-    });
-    container.appendChild(item);
-  });
-}
 
 // ── Test API ──────────────────────────────────────────────────────────────────
 document.getElementById("testBtn")?.addEventListener("click", async () => {
@@ -261,7 +214,6 @@ function renderAll() {
   setRadio("replyLength",     settings.replyLength    || "auto");
   setRadio("replyTone",       settings.replyTone      || "auto");
   setRadio("followUpHours",   String(settings.followUpHours || 24));
-  setRadio("shortenStrength", settings.shortenStrength || "medium");
   setRadio("modelBackend",    settings.modelBackend   || "groq");
 
   // Sliders
@@ -271,14 +223,8 @@ function renderAll() {
   if (tempVal)    tempVal.textContent = ((settings.temperature ?? 3) / 10).toFixed(1);
 
   // Selects
-  const ttEl = document.getElementById("translateTarget");
-  if (ttEl) ttEl.value = settings.translateTarget || "auto";
   const msEl = document.getElementById("modelSelect");
   if (msEl) msEl.value = settings.modelSelect || "openai/gpt-oss-120b";
-
-  // Text inputs
-  const cdEl = document.getElementById("customDefault");
-  if (cdEl) cdEl.value = settings.customDefault || DEFAULTS.customDefault;
 
   // API key slots
   const keys = settings.apiKeys || [];
@@ -286,9 +232,6 @@ function renderAll() {
     const el = document.getElementById(id);
     if (el) el.value = keys[i] || "";
   });
-
-  // Action toggles
-  buildActionToggles();
 
   // Warn if no keys
   const badge = document.getElementById("statusBadge");

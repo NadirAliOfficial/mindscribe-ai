@@ -6,27 +6,8 @@
 
   const MODEL = "openai/gpt-oss-120b";
 
-  const ICONS = {
-    rewrite:      `<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>`,
-    proofread:    `<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/></svg>`,
-    professional: `<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M6.5 1A1.5 1.5 0 0 0 5 2.5V3H1.5A1.5 1.5 0 0 0 0 4.5v1.384l7.614 2.03a1.5 1.5 0 0 0 .772 0L16 5.884V4.5A1.5 1.5 0 0 0 14.5 3H11v-.5A1.5 1.5 0 0 0 9.5 1h-3zm0 1h3a.5.5 0 0 1 .5.5V3H6v-.5a.5.5 0 0 1 .5-.5z"/><path d="M0 12.5A1.5 1.5 0 0 0 1.5 14h13a1.5 1.5 0 0 0 1.5-1.5V6.85L8.129 8.947a.5.5 0 0 1-.258 0L0 6.85v5.65z"/></svg>`,
-    shorten:      `<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M3.5 3.5c-.614-.884-.074-1.962.858-2.5L8 7.226 11.642 1c.932.538 1.472 1.616.858 2.5L8.81 8H16v2H8.002l.03.03 4.987 5.5H11.82l-3.82-4.221L4.18 15.53H2.833L7.82 10.03 8.002 10H0V8h7.19L3.5 3.5z"/></svg>`,
-    clean:        `<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8.086 2.207a2 2 0 0 1 2.828 0l3.879 3.879a2 2 0 0 1 0 2.828l-5.5 5.5A2 2 0 0 1 7.879 15H5.12a2 2 0 0 1-1.414-.586l-2.5-2.5a2 2 0 0 1 0-2.828l6.879-6.879zm.66 11.34L3.453 8.254 1.914 9.793a1 1 0 0 0 0 1.414l2.5 2.5a1 1 0 0 0 .707.293H7.88a1 1 0 0 0 .707-.293l.16-.16z"/></svg>`,
-    siteOn:       `<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M7 5H3a3 3 0 0 0 0 6h4a4.995 4.995 0 0 1-.584-1H3a2 2 0 1 1 0-4h3.416c.156-.357.352-.692.584-1z"/><path d="M16 8A5 5 0 1 1 6 8a5 5 0 0 1 10 0z"/></svg>`,
-    siteOff:      `<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M9 5H5a5 5 0 0 0 0 10h4a4.994 4.994 0 0 0 2.584-1H5a4 4 0 1 1 0-8h6.584A4.992 4.992 0 0 0 9 5z"/></svg>`,
-    chevron:      `<svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path fill-rule="evenodd" d="M4.646 6.646a.5.5 0 0 1 .708 0L8 9.293l2.646-2.647a.5.5 0 0 1 .708.708l-3 3a.5.5 0 0 1-.708 0l-3-3a.5.5 0 0 1 0-.708z"/></svg>`,
-  };
-
-  const ACTIONS = [
-    { label: "Rewrite",      type: "rewrite",      icon: ICONS.rewrite,      desc: "Rephrase with different wording, same meaning" },
-    { label: "Proofread",    type: "proofread",    icon: ICONS.proofread,    desc: "Fix grammar, spelling and punctuation" },
-    { label: "Professional", type: "professional", icon: ICONS.professional, desc: "Rewrite in formal business tone" },
-    { label: "Shorten",      type: "shorten",      icon: ICONS.shorten,      desc: "Cut filler words, keep every point" },
-    { label: "Clean",        type: "clean",        icon: ICONS.clean,        desc: "Remove formatting noise and extra spaces" },
-  ];
-
   const SHOTS = {
-    enhance: [], rewrite: [], proofread: [], professional: [], shorten: [], clean: [],
+    enhance: [],
   };
 
   // ── Live settings (synced in real-time via storage.onChanged) ───────────
@@ -41,10 +22,6 @@
     replyTone:       "auto",
     followUp:        true,
     followUpHours:   24,
-    shortenStrength: "medium",
-    translateTarget: "auto",
-    customDefault:   "Make this text more concise and impactful.",
-    disabledActions: [],
     modelSelect:     "openai/gpt-oss-120b",
     temperature:     3,
     modelBackend:    "groq",
@@ -58,9 +35,8 @@
   }
 
   try {
-    chrome.storage.local.get(["te_settings", "te_custom_prompt", "te_templates", "te_site_usage", "te_disabled_sites"], r => {
+    chrome.storage.local.get(["te_settings", "te_templates", "te_site_usage", "te_disabled_sites"], r => {
       if (r.te_settings)       applySettings(r.te_settings);
-      if (r.te_custom_prompt)  CFG.customDefault = r.te_custom_prompt;
       if (r.te_site_usage)     siteUsage = r.te_site_usage;
       if (r.te_templates)      templates = r.te_templates;
       if (r.te_disabled_sites) siteDisabled = r.te_disabled_sites.includes(window.location.hostname);
@@ -71,30 +47,17 @@
   try {
     chrome.storage.onChanged.addListener((changes) => {
       if (changes.te_settings?.newValue)    applySettings(changes.te_settings.newValue);
-      if (changes.te_custom_prompt?.newValue) CFG.customDefault = changes.te_custom_prompt.newValue;
       if (changes.te_templates?.newValue)   templates = changes.te_templates.newValue;
     });
   } catch (_) {}
 
-  let customPrompt = CFG.customDefault;
-
   const SYSTEM_MSG = {
-    enhance:      "You are Mindscribe AI, an intelligent adaptive writing enhancer. Analyze the text in <input> tags and enhance it:\n1. TONE ADAPTATION: If the text is casual or friendly (e.g., informal chats, greetings like 'hey', 'bro', emojis), preserve that casual, warm, conversational tone — NEVER make it sound stiff, robotic, or overly corporate. If the text is professional, business, or formal (e.g., work emails, client inquiries, greetings like 'Hello', 'Dear'), make it articulate, polished, crisp, and professional.\n2. ERROR CORRECTION: Fix all spelling errors, typos, grammatical mistakes, missing punctuation, and capitalization.\n3. NATURAL POLISH: Improve clarity and flow while keeping the author's original meaning and authentic voice.\n4. FORMAT: Preserve the exact paragraph structure and blank lines. Output ONLY the enhanced text. Do NOT include <input> tags, quotes, or explanations.",
-    rewrite:      "Rephrase the text in <input> tags using different wording. Keep the same meaning, length, and speaker perspective. IMPORTANT: Preserve the exact paragraph structure — keep blank lines between paragraphs exactly as in the original. Output ONLY the rewritten text. Do NOT include <input> tags or any explanation.",
-    proofread:    "Fix all grammar, spelling, and punctuation in the text in <input> tags. Do not change wording or style. IMPORTANT: Preserve the exact paragraph structure — keep blank lines between paragraphs exactly as in the original. Output ONLY the corrected text without <input> tags and without any explanation.",
-    shorten:      "Shorten the text in <input> tags. Keep ALL points and information — only remove filler and redundancy. Keep the speaker's voice. IMPORTANT: Preserve the paragraph structure — keep blank lines between paragraphs. Output ONLY the shortened text. Do NOT include <input> tags or any explanation.",
-    professional: "Rewrite the text in <input> tags to sound formal and professional. Keep the same meaning, the same number of sentences, and the same length — do not add new sentences or new content. IMPORTANT: Preserve the exact paragraph structure — keep blank lines between paragraphs exactly as in the original. Output ONLY the rewritten text. Do NOT include <input> tags or any explanation.",
-    clean:        "Clean up the text in <input> tags that was copied from a terminal or chat. Remove extra whitespace, alignment padding, and separator lines (lines made only of dashes, equals signs, or underscores). IMPORTANT: Keep blank lines between paragraphs — do NOT merge paragraphs together. Keep ALL message content word-for-word — do not rephrase, summarize, or alter any wording. Output ONLY the cleaned text.",
+    enhance: "You are Mindscribe AI, an intelligent adaptive writing enhancer. Analyze the text in <input> tags and enhance it:\n1. TONE ADAPTATION: If the text is casual or friendly (e.g., informal chats, greetings like 'hey', 'bro', emojis), preserve that casual, warm, conversational tone — NEVER make it sound stiff, robotic, or overly corporate. If the text is professional, business, or formal (e.g., work emails, client inquiries, greetings like 'Hello', 'Dear'), make it articulate, polished, crisp, and professional.\n2. ERROR CORRECTION: Fix all spelling errors, typos, grammatical mistakes, missing punctuation, and capitalization.\n3. NATURAL POLISH: Improve clarity and flow while keeping the author's original meaning and authentic voice.\n4. FORMAT: Preserve the exact paragraph structure and blank lines. Output ONLY the enhanced text. Do NOT include <input> tags, quotes, or explanations.",
   };
 
-  // Shorter, stricter prompts for small local Ollama models which ignore long instructions
+  // Shorter, stricter prompt for small local Ollama models which ignore long instructions
   const SYSTEM_MSG_OLLAMA = {
-    enhance:      "Fix all typos, spelling, and grammar in <input> tags. If casual, keep it casual and friendly. If formal, make it professional. Output ONLY the corrected text without explanations.",
-    rewrite:      "Rewrite the text inside <input> tags using different words. Same meaning, same length. Output ONLY the rewritten text, nothing else.",
-    proofread:    "Fix ONLY spelling and punctuation errors in the text inside <input> tags. Do NOT rephrase, reword, or change any words. Do NOT add or remove content. Output ONLY the corrected text.",
-    shorten:      "Remove filler words from the text inside <input> tags to make it shorter. Keep ALL the original information and every key word. Output ONLY the shortened text.",
-    professional: "Rewrite the text inside <input> tags to sound more formal. Same meaning, same length. Output ONLY the rewritten text.",
-    clean:        "Remove separator lines (---, ===) and extra spaces from the text inside <input> tags. Keep all words exactly as written. Output ONLY the cleaned text.",
+    enhance: "Fix all typos, spelling, and grammar in <input> tags. If casual, keep it casual and friendly. If formal, make it professional. Output ONLY the corrected text without explanations.",
   };
 
   let toolbar     = null; // always-visible action bar below input
@@ -249,26 +212,6 @@
   }
 
   // ── Action toolbar ────────────────────────────────────────────────────────
-
-  function makeActionBtn({ label, type, icon, desc }) {
-    const btn = document.createElement("button");
-    btn.className = "te-action-btn";
-    btn.dataset.type = type;
-    btn.title = desc || label;
-    const iconEl = document.createElement("span");
-    iconEl.className = "te-btn-icon";
-    iconEl.innerHTML = icon;
-    const labelEl = document.createElement("span");
-    labelEl.textContent = label;
-    btn.appendChild(iconEl);
-    btn.appendChild(labelEl);
-    btn.addEventListener("mousedown", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      runAction(type);
-    });
-    return btn;
-  }
 
   function getToolbar() {
     if (toolbar) return toolbar;
@@ -1043,57 +986,26 @@
     return `Rate limited — wait ${secs}s`;
   }
 
-  function wordCount(text) {
-    return text.trim().split(/\s+/).filter(Boolean).length;
-  }
-
-  function getShortenTarget(w, strength) {
-    const ratios = { light: [0.65, 0.75], medium: [0.40, 0.55], aggressive: [0.20, 0.32] };
-    const [lo, hi] = ratios[strength] || ratios.medium;
-    const loW = Math.max(10, Math.round(w * lo));
-    const hiW = Math.max(15, Math.round(w * hi));
-    return `${loW} to ${hiW} words`;
-  }
-
-  // Returns the right system message — shorten gets a precise word-count target
-  function getSystemMsg(type, text) {
+  function getSystemMsg(type) {
     if (CFG.modelBackend === "ollama") {
       return SYSTEM_MSG_OLLAMA[type] || SYSTEM_MSG[type];
-    }
-    if (type === "shorten") {
-      const w      = wordCount(text);
-      const target = getShortenTarget(w, CFG.shortenStrength);
-      const rule   = CFG.shortenStrength === "light"
-        ? "Remove filler words and redundant phrases only."
-        : CFG.shortenStrength === "aggressive"
-        ? "Be very concise — cut everything except the essential points."
-        : "Remove filler words and combine sentences where possible.";
-      return `Shorten the text in <input> tags to approximately ${target}. IMPORTANT: Keep EVERY point, fact, and piece of information from the original — do NOT omit any content. ${rule} Keep the speaker's voice. Output ONLY the shortened text, no explanation.`;
     }
     return SYSTEM_MSG[type];
   }
 
   // Returns Ollama options scaled to the text length so large texts don't fail
-  function getOllamaOptions(type, text) {
+  function getOllamaOptions(text) {
     const chars = text.length;
-    const w     = wordCount(text);
 
     // Context window: input tokens ≈ chars/3.5, add headroom for system + shots + output
     const inputTokens = Math.ceil(chars / 3.5);
     const num_ctx = Math.min(32768, Math.max(2048, inputTokens * 2 + 1200));
 
-    // Cap output tokens to prevent runaway generation and save quota
-    let num_predict;
-    if (type === "shorten") {
-      const ratios = { light: 0.80, medium: 0.60, aggressive: 0.40 };
-      const ratio  = ratios[CFG.shortenStrength] || 0.60;
-      num_predict  = Math.max(60, Math.ceil(w * ratio * 1.4));
-    } else {
-      // Rewrites stay roughly input-sized — cap well under Groq's free-tier
-      // 8K tokens-per-minute limit, which an omitted/unbounded max_tokens can
-      // exceed outright and get rejected as "Request too large".
-      num_predict = Math.min(2000, Math.max(150, inputTokens * 2));
-    }
+    // Cap output tokens to prevent runaway generation and save quota.
+    // Stays roughly input-sized — cap well under Groq's free-tier 8K tokens-per-minute
+    // limit, which an omitted/unbounded max_tokens can exceed outright and get
+    // rejected as "Request too large".
+    const num_predict = Math.min(2000, Math.max(150, inputTokens * 2));
 
     return { temperature: 0.3, num_predict, num_ctx, keep_alive: -1 };
   }
@@ -1108,9 +1020,9 @@
           payload: {
             model: CFG.modelSelect || MODEL,
             stream: false,
-            options: getOllamaOptions(type, text),
+            options: getOllamaOptions(text),
             messages: [
-              { role: "system", content: getSystemMsg(type, text) },
+              { role: "system", content: getSystemMsg(type) },
               ...(Array.isArray(SHOTS?.[type]) ? SHOTS[type] : []),
               { role: "user", content: `<input>${text}</input>` },
             ],
@@ -1259,11 +1171,11 @@
       port.postMessage({
         model: CFG.modelSelect || MODEL,
         messages: [
-          { role: "system", content: getSystemMsg(type, text) },
+          { role: "system", content: getSystemMsg(type) },
           ...(Array.isArray(SHOTS?.[type]) ? SHOTS[type] : []),
           { role: "user", content: `<input>${text}</input>` },
         ],
-        options: getOllamaOptions(type, text),
+        options: getOllamaOptions(text),
       });
     } catch (e) {
       onError(e.message || "Failed to start enhancement");
@@ -1317,7 +1229,6 @@
         };
 
         let currentRole = "them";
-        let debugCount = 0;
 
         container.querySelectorAll(".msg-s-message-list__event").forEach(group => {
           const bodyEl = group.querySelector(
@@ -1326,18 +1237,6 @@
           );
           const text = bodyEl?.innerText?.trim();
           if (!text || text.length < 2) return;
-
-          // Debug first 4 groups to expose actual DOM signals
-          if (debugCount < 4) {
-            debugCount++;
-            console.log(`[TE LI] group[${debugCount}] text="${text.slice(0,25)}"`, {
-              groupAria: group.getAttribute("aria-label")?.slice(0, 100),
-              innerTextStart: group.innerText?.slice(0, 120).replace(/\n/g, "↵"),
-              imgs: Array.from(group.querySelectorAll("img")).slice(0, 3).map(i => ({ alt: i.alt, ariaLink: i.closest("a")?.getAttribute("aria-label")?.slice(0, 60) })),
-              aAriaLabels: Array.from(group.querySelectorAll("a[aria-label]")).slice(0, 3).map(a => a.getAttribute("aria-label")?.slice(0, 60)),
-              myName, myFirstName,
-            });
-          }
 
           const senderName = getSenderName(group);
           const hasAvatar = !!group.querySelector("img");
@@ -1704,7 +1603,6 @@
     }
     const lastClientMsg = stripSignoff(trailingThemParts.join("\n"));
     const clientWords   = lastClientMsg.trim().split(/\s+/).filter(Boolean).length;
-    console.log("[TE SR] lastClientMsg:", JSON.stringify(lastClientMsg.slice(0, 200)), "| clientWords:", clientWords);
 
     let lengthGuide, maxTokens;
     if (CFG.replyLength === "short") {
@@ -1789,14 +1687,7 @@
     const draftText = getText(el).trim();
     const chatMsgs  = extractChatHistory(el);
 
-    console.log("[TE SR] chatMsgs count:", chatMsgs.length);
-    chatMsgs.forEach((m, i) => console.log(`[TE SR]  [${i}][${m.role}] ${m.content.slice(0, 120)}`));
-
     const { system, userContent, maxTokens } = buildSmartReplyMessages(chatMsgs, draftText);
-
-    console.log("[TE SR] system prompt:", system.slice(0, 300));
-    console.log("[TE SR] userContent:", userContent.slice(0, 500));
-    console.log("[TE SR] maxTokens:", maxTokens);
 
     if (draftText) {
       undoStack.push({ el, text: draftText });
@@ -1852,8 +1743,6 @@
     });
 
     srStreaming = false;
-
-    console.log("[TE SR] final result:", JSON.stringify(result));
 
     if (result) {
       setText(el, result);

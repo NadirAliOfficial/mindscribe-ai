@@ -191,18 +191,6 @@
   }
   .test-btn:hover { border-color: #444; color: #ddd; background: #1e1e1e; }
 
-  /* ── Action toggle grid ── */
-  .action-grid {
-    display: grid; grid-template-columns: 1fr 1fr;
-    gap: 7px; margin-top: 2px;
-  }
-  .action-item {
-    display: flex; align-items: center; justify-content: space-between;
-    background: #111; border: 1px solid #1e1e1e;
-    border-radius: 8px; padding: 8px 10px;
-  }
-  .action-item-label { font-size: 12px; color: #aaa; }
-
   /* ── Footer ── */
   .footer {
     padding: 9px 16px; border-top: 1px solid #181818;
@@ -256,9 +244,6 @@
   </div>
   <div class="tab" data-tab="smartreply">
     <span class="tab-icon">💬</span>Reply
-  </div>
-  <div class="tab" data-tab="actions">
-    <span class="tab-icon">✦</span>Actions
   </div>
   <div class="tab" data-tab="api">
     <span class="tab-icon">🔑</span>API
@@ -394,32 +379,6 @@
         </div>
       </div>
     </div>
-  </div>
-
-</div>
-
-<!-- ── Actions ── -->
-<div class="panel" id="tab-actions">
-
-  <div class="card">
-    <div class="card-title">Shorten Strength</div>
-    <div class="row-sub mb-8">All points are kept — only controls how much wording is cut</div>
-    <div class="chips" id="shortenStrength">
-      <div class="chip" data-val="light">Light (~70%)</div>
-      <div class="chip active" data-val="medium">Medium (~50%)</div>
-      <div class="chip" data-val="aggressive">Aggressive (~30%)</div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">Custom Prompt Default</div>
-    <textarea class="inp" id="customDefault" rows="2"
-      placeholder="e.g. Make this more concise and impactful."></textarea>
-  </div>
-
-  <div class="card">
-    <div class="card-title">Enabled Actions</div>
-    <div class="action-grid" id="actionToggles"></div>
   </div>
 
 </div>
