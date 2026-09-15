@@ -1111,7 +1111,7 @@
             options: getOllamaOptions(type, text),
             messages: [
               { role: "system", content: getSystemMsg(type, text) },
-              ...(SHOTS[type] || []),
+              ...(Array.isArray(SHOTS?.[type]) ? SHOTS[type] : []),
               { role: "user", content: `<input>${text}</input>` },
             ],
           },
@@ -1260,7 +1260,7 @@
         model: CFG.modelSelect || MODEL,
         messages: [
           { role: "system", content: getSystemMsg(type, text) },
-          ...(SHOTS[type] || []),
+          ...(Array.isArray(SHOTS?.[type]) ? SHOTS[type] : []),
           { role: "user", content: `<input>${text}</input>` },
         ],
         options: getOllamaOptions(type, text),
