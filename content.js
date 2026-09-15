@@ -1275,8 +1275,7 @@
           container.children.length > 2) break;
       container = container.parentElement;
     }
-    console.log("[TE] container found:", container?.className || container?.tagName, "| scrollH:", container?.scrollHeight, "clientH:", container?.clientHeight, "children:", container?.children.length);
-    if (!container || container === document.body) { console.log("[TE] container is body — aborting"); return []; }
+    if (!container || container === document.body) return [];
 
     // On Fiverr the message list and composer are siblings — the narrowed child that
     // contains the input is just the compose box, which has no messages.
@@ -1286,8 +1285,7 @@
       while (n?.parentElement && n.parentElement !== container) n = n.parentElement;
       return (!n || n === container) ? container : n;
     })();
-    if (!searchRoot) { console.log("[TE] searchRoot null — aborting"); return []; }
-    console.log("[TE] searchRoot:", searchRoot?.className || searchRoot?.tagName);
+    if (!searchRoot) return [];
 
     // ── Strategy 1: "Me" / own-name label detection
     // Fiverr shows "Me" in Chrome but full name (e.g. "Nadir Ali Khan") in Brave.
@@ -1299,7 +1297,6 @@
         "[data-testid='user-name'], [aria-label*='profile']"
       )?.innerText?.trim() || ""
     ).toLowerCase();
-    console.log("[TE] pageOwnerName:", JSON.stringify(pageOwnerName));
 
     const myRowRoots = new Set();
     Array.from(searchRoot.querySelectorAll("*")).forEach(el => {
@@ -1385,10 +1382,7 @@
     const timestamped = candidates.filter(c => c.timestamp !== null);
     const finalCandidates = timestamped.length ? timestamped : candidates;
 
-    console.log("[TE] myRowRoots size:", myRowRoots.size, "| total candidates:", candidates.length, "| timestamped:", timestamped.length, "| finalCandidates:", finalCandidates.length);
-    console.log("[TE] all candidates text:", candidates.map(c => JSON.stringify(c.text.slice(0, 60))).join(", "));
-
-    if (!finalCandidates.length) { console.log("[TE] no finalCandidates — aborting"); return []; }
+    if (!finalCandidates.length) return [];
 
     // Merge consecutive fragments from the same sender into a single message.
     // Fiverr renders multi-paragraph messages as separate leaf nodes, so without this
@@ -1408,38 +1402,28 @@
 
     // If we found "Me" labels, use label-based detection
     if (myRowRoots.size > 0) {
-      console.log("[TE] using Strategy 1 (Me-label detection)");
-      const result = mergeConsecutive(finalCandidates.slice(-30).map(c => ({
+      return mergeConsecutive(finalCandidates.slice(-30).map(c => ({
         role:      isMyRow(c.el) ? "me" : "them",
         content:   c.text,
         timestamp: c.timestamp,
       })));
-      console.log("[TE] extracted msgs:", result.map(m => `[${m.role}] ${m.content.slice(0, 80)}`));
-      return result;
     }
 
     // ── Strategy 2: Dynamic position-based (bubble chat layouts)
-    console.log("[TE] using Strategy 2 (position-based)");
     const rootWidth = searchRoot.getBoundingClientRect().width || window.innerWidth;
     const bubbles   = finalCandidates.filter(c => c.rect.width <= rootWidth * 0.82);
-    console.log("[TE] bubbles:", bubbles.length, "rootWidth:", rootWidth);
     if (!bubbles.length) {
-      const result = mergeConsecutive(finalCandidates.slice(-30).map(c => ({ role: "them", content: c.text, timestamp: c.timestamp })));
-      console.log("[TE] no bubbles — all as them:", result.map(m => m.content.slice(0, 60)));
-      return result;
+      return mergeConsecutive(finalCandidates.slice(-30).map(c => ({ role: "them", content: c.text, timestamp: c.timestamp })));
     }
 
     const centers     = bubbles.map(c => c.rect.left + c.rect.width / 2);
     const dynamicMidX = (Math.min(...centers) + Math.max(...centers)) / 2;
-    console.log("[TE] dynamicMidX:", dynamicMidX, "centers:", centers.slice(0, 5));
 
-    const result2 = mergeConsecutive(bubbles.slice(-30).map(c => ({
+    return mergeConsecutive(bubbles.slice(-30).map(c => ({
       role:      (c.rect.left + c.rect.width / 2) > dynamicMidX ? "me" : "them",
       content:   c.text,
       timestamp: c.timestamp,
     })));
-    console.log("[TE] extracted msgs (strat2):", result2.map(m => `[${m.role}] ${m.content.slice(0, 80)}`));
-    return result2;
   }
 
   // ── Smart Reply helpers ───────────────────────────────────────────────────
