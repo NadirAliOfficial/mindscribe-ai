@@ -46,14 +46,16 @@
 }
 #te-toolbar.te-expanded .te-expand-btn { transform: rotate(180deg); color: #4ade80; }
 
-/* Collapsed by default — only the primary action + expand toggle show until clicked */
+/* Collapsed by default — only the primary action + expand toggle show until clicked.
+   !important guards against host-page global CSS (LinkedIn etc. reset styles
+   aggressively) silently overriding display on injected elements. */
 .te-more-actions {
-  display: none;
+  display: none !important;
   align-items: center;
   gap: 4px;
 }
 #te-toolbar.te-expanded .te-more-actions {
-  display: flex;
+  display: flex !important;
   animation: te-fadein 0.14s cubic-bezier(0.16,1,0.3,1);
 }
 

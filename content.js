@@ -287,7 +287,15 @@
     expandBtn.addEventListener("mousedown", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      toolbar.classList.toggle("te-expanded");
+      const nowExpanded = toolbar.classList.toggle("te-expanded");
+      console.log("[TE] expand clicked, now expanded:", nowExpanded);
+      // Re-clamp so the wider expanded bar can't run off the right edge of the screen
+      if (nowExpanded) {
+        const r = toolbar.getBoundingClientRect();
+        if (r.right > window.innerWidth - 8) {
+          toolbar.style.left = Math.max(8, window.innerWidth - r.width - 8) + "px";
+        }
+      }
     });
     toolbar.appendChild(expandBtn);
 
@@ -517,6 +525,64 @@
     if (result) { setText(el, result); scheduleFollowUp(el); }
   }
 
+  // Where the cursor/caret actually is, not just the field's outer box —
+  // so the toolbar tracks where you're typing instead of sitting at a fixed
+  // corner of a large textarea/contenteditable.
+  function getCaretRect(el) {
+    if (el.isContentEditable) {
+      try {
+        const sel = window.getSelection();
+        if (sel.rangeCount > 0) {
+          const range = sel.getRangeAt(0).cloneRange();
+          range.collapse(false);
+          const rects = range.getClientRects();
+          if (rects.length) return rects[rects.length - 1];
+          const r = range.getBoundingClientRect();
+          if (r.width || r.height || r.top) return r;
+        }
+      } catch (_) {}
+      return el.getBoundingClientRect();
+    }
+
+    // <textarea>/<input> — no native caret-position API, so mirror the field
+    // in a hidden div up to the caret and measure where that text ends.
+    try {
+      const style = window.getComputedStyle(el);
+      const mirror = document.createElement("div");
+      [
+        "boxSizing","width","paddingTop","paddingRight","paddingBottom","paddingLeft",
+        "borderTopWidth","borderRightWidth","borderBottomWidth","borderLeftWidth",
+        "fontFamily","fontSize","fontWeight","fontStyle","letterSpacing","lineHeight",
+        "textTransform","wordSpacing",
+      ].forEach((p) => { mirror.style[p] = style[p]; });
+      mirror.style.position   = "absolute";
+      mirror.style.visibility = "hidden";
+      mirror.style.whiteSpace = "pre-wrap";
+      mirror.style.wordWrap   = "break-word";
+      mirror.style.top  = "0";
+      mirror.style.left = "-9999px";
+
+      const caretPos   = el.selectionEnd ?? el.value.length;
+      mirror.textContent = el.value.substring(0, caretPos);
+      const marker = document.createElement("span");
+      marker.textContent = el.value.substring(caretPos)[0] || ".";
+      mirror.appendChild(marker);
+      document.body.appendChild(mirror);
+
+      const markerRect = marker.getBoundingClientRect();
+      const mirrorRect = mirror.getBoundingClientRect();
+      const elRect      = el.getBoundingClientRect();
+      const relTop  = markerRect.top  - mirrorRect.top;
+      const relLeft = markerRect.left - mirrorRect.left;
+      document.body.removeChild(mirror);
+
+      const top = elRect.top - el.scrollTop + relTop;
+      return { top, bottom: top + markerRect.height, left: elRect.left - el.scrollLeft + relLeft, right: elRect.left - el.scrollLeft + relLeft };
+    } catch (_) {
+      return el.getBoundingClientRect();
+    }
+  }
+
   function positionToolbar(el) {
     const t = getToolbar();
     const s = getSrBtn();
@@ -524,9 +590,9 @@
     if (CFG.srEnabled && isChatSite())  s.style.display = "flex";
     else                                s.style.display = "none";
     if (!toolbarDragged) {
-      const r = el.getBoundingClientRect();
+      const r = getCaretRect(el);
       t.style.top  = Math.min(r.bottom + 6, window.innerHeight - 46) + "px";
-      t.style.left = Math.max(8, r.left) + "px";
+      t.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 280)) + "px";
     }
     const r = el.getBoundingClientRect();
     s.style.top  = Math.max(4, r.bottom - 34) + "px";
