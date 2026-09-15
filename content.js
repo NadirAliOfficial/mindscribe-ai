@@ -525,14 +525,18 @@
     if (result) { setText(el, result); scheduleFollowUp(el); }
   }
 
-  // Simple, predictable placement: fixed to the top-right corner of the actual
-  // field the keystroke landed on. `anchorEl` (the raw event target) is used
-  // for the rect instead of `el` (which may be editableRoot()'s walked-up
-  // result) — on some sites editableRoot climbs through nested contenteditable
-  // ancestors and lands on a container far bigger than the real compose box.
+  // Simple, predictable placement: fixed just above whatever field is truly
+  // focused right now. Trust document.activeElement directly instead of `el`/
+  // `anchorEl` — those are tracked references captured at some earlier event
+  // and can go stale or point at the wrong element on sites with complex
+  // nested/rebuilt DOM (confirmed wrong on Fiverr and a LinkedIn-style inbox).
+  // document.activeElement is the browser's own live focus state — it cannot
+  // be stale, since it's read fresh every time this function runs.
   function positionToolbar(el, anchorEl) {
     const t = getToolbar();
     const s = getSrBtn();
+
+    const live = isEditable(document.activeElement) ? document.activeElement : (anchorEl || el);
 
     // Rewrite/Proofread/etc act on existing text — nothing to show for an empty field.
     // Smart Reply is unaffected: it drafts a NEW reply from conversation context,
@@ -543,7 +547,7 @@
     if (CFG.srEnabled && isChatSite())  s.style.display = "flex";
     else                                s.style.display = "none";
 
-    const fieldRect = (anchorEl || el).getBoundingClientRect();
+    const fieldRect = live.getBoundingClientRect();
     if (!toolbarDragged && hasText) {
       t.style.top  = Math.max(4, fieldRect.top - 40) + "px"; // just above the field, fixed
       t.style.left = Math.max(8, Math.min(fieldRect.left, window.innerWidth - 280)) + "px";
