@@ -595,12 +595,21 @@
     else                                 t.style.display = "none";
     if (CFG.srEnabled && isChatSite())  s.style.display = "flex";
     else                                s.style.display = "none";
+    const fieldRect = el.getBoundingClientRect();
     if (!toolbarDragged && hasText) {
-      const r = getCaretRect(el);
+      let r = getCaretRect(el);
+      // Sanity check — some chat UIs (Fiverr inbox included) rebuild the compose
+      // box's DOM reactively after each keystroke, which can leave the browser's
+      // selection pointing at a stale/detached node. If the "caret" we got back
+      // isn't actually within the field itself, it's garbage — use the field's
+      // own position instead of trusting it.
+      const within = r.top >= fieldRect.top - 4 && r.top <= fieldRect.bottom + 4
+                  && r.left >= fieldRect.left - 4 && r.left <= fieldRect.right + 4;
+      if (!within) r = fieldRect;
       t.style.top  = Math.min(r.bottom + 6, window.innerHeight - 46) + "px";
       t.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 280)) + "px";
     }
-    const r = el.getBoundingClientRect();
+    const r = fieldRect;
     s.style.top  = Math.max(4, r.bottom - 34) + "px";
     s.style.left = Math.max(4, r.right - 34)  + "px";
   }
