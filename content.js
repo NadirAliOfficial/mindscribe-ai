@@ -606,6 +606,11 @@
       const within = r.top >= fieldRect.top - 4 && r.top <= fieldRect.bottom + 4
                   && r.left >= fieldRect.left - 4 && r.left <= fieldRect.right + 4;
       if (!within) r = fieldRect;
+      console.log("[TE] positionToolbar — el:", el.tagName, el.id || "(no id)", el.className || "(no class)",
+        "| isContentEditable:", el.isContentEditable,
+        "| fieldRect:", JSON.stringify(fieldRect),
+        "| caretRect:", JSON.stringify(getCaretRect(el)),
+        "| within-field:", within, "| final r used:", JSON.stringify(r));
       t.style.top  = Math.min(r.bottom + 6, window.innerHeight - 46) + "px";
       t.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 280)) + "px";
     }
