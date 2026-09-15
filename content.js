@@ -539,6 +539,11 @@
     const s = getSrBtn();
 
     const live = isEditable(document.activeElement) ? document.activeElement : (anchorEl || el);
+    console.log("[TE] positionToolbar CALLED at", new Date().toISOString().slice(11, 19),
+      "| el:", el?.tagName, el?.className?.toString().slice(0, 40),
+      "| document.activeElement:", document.activeElement?.tagName, document.activeElement?.className?.toString().slice(0, 40),
+      "| using 'live':", live === document.activeElement ? "activeElement" : (live === anchorEl ? "anchorEl" : "el-fallback"),
+      "| live rect:", JSON.stringify(live?.getBoundingClientRect?.()));
 
     // Rewrite/Proofread/etc act on existing text — nothing to show for an empty field.
     // Smart Reply is unaffected: it drafts a NEW reply from conversation context,
@@ -1713,6 +1718,7 @@
   let suggestTimer = null;
 
   function handleTyping(el, anchorEl) {
+    console.log("[TE] handleTyping ENTERED | el:", el?.tagName, "| isEditable(el):", isEditable(el), "| srStreaming:", srStreaming);
     if (!isEditable(el)) return;
     if (srStreaming) return; // don't interfere while smart reply is streaming
     focused = el; lastFocused = el;
