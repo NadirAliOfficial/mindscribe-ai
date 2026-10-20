@@ -82,6 +82,9 @@
   let siteDisabled     = false; // auto-suggest disabled for this hostname
   let responseTimerInt = null;  // setInterval for the waiting-time badge on SR button
   let followUpTimer    = null;  // setTimeout for follow-up reminder
+  let altHeld           = false; // true while Cmd/Win (Meta) is physically down
+  let altHoldCancelled  = false; // true once another key pressed during the hold (real Cmd-combo)
+  let altHoldTimer      = null;  // setTimeout for the hold-to-enhance trigger
 
   // (loaded centrally above via chrome.storage.local.get)
 
@@ -182,11 +185,20 @@
     if (!el) return;
     if (el.isContentEditable) {
       el.focus();
-      document.execCommand("selectAll", false, null);
-      document.execCommand("insertText", false, newText);
+      // Select only the editor's own contents. execCommand("selectAll") can grab the
+      // whole page when the rich editor (LinkedIn/Quill, WhatsApp/Lexical) hasn't
+      // claimed the selection yet, and insertText then lands nowhere.
+      const sel = window.getSelection();
+      const all = document.createRange();
+      all.selectNodeContents(el);
+      sel.removeAllRanges();
+      sel.addRange(all);
+      if (!document.execCommand("insertText", false, newText)) {
+        el.innerText = newText;
+        el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: newText }));
+      }
 
       // Restore cursor to end so backspace works immediately
-      const sel = window.getSelection();
       const endRange = document.createRange();
       endRange.selectNodeContents(el);
       endRange.collapse(false);
@@ -204,11 +216,13 @@
     }
   }
 
-  // Low-level write — no events fired, used for live streaming into the input
+  // Low-level write — no events fired, used for live streaming into the input.
+  // Plain inputs/textareas only: overwriting innerText of a rich editor (LinkedIn,
+  // WhatsApp, Slack) desyncs its internal model, garbling text or leaving Post disabled.
+  // Rich editors get the result once, via setText, when the stream finishes.
   function setTextLive(el, text) {
-    if (!el) return;
-    if (el.isContentEditable) { el.innerText = text; }
-    else { el.value = text; }
+    if (!el || el.isContentEditable) return;
+    el.value = text;
   }
 
   // ── Action toolbar ────────────────────────────────────────────────────────
@@ -223,7 +237,7 @@
     smartBtn.id = "te-smart-btn";
     smartBtn.className = "te-smart-btn";
     smartBtn.dataset.type = "enhance";
-    smartBtn.title = "Mindscribe AI — Click to enhance text";
+    smartBtn.title = "Mindscribe AI — Click to enhance text (hold Cmd)";
 
     const logoImg = document.createElement("img");
     logoImg.className = "te-btn-logo";
@@ -1178,6 +1192,10 @@
           onError("refusal");
           return;
         }
+        if (!cleaned.trim()) {
+          onError("empty");
+          return;
+        }
         onDone(cleaned);
       }
     });
@@ -1755,8 +1773,8 @@
       srStreaming = false;
       s.textContent = "⚠";
       s.style.pointerEvents = "";
-      if (raw) setTextLive(el, clean(raw)); // keep whatever streamed so far
-      else if (draftText) setTextLive(el, draftText); // restore draft on full failure
+      if (raw) setText(el, clean(raw)); // keep whatever streamed so far
+      else if (draftText) setText(el, draftText); // restore draft on full failure
       setTimeout(() => { s.textContent = origIcon; }, 2000);
       return null;
     });
@@ -1808,13 +1826,16 @@
           return;
         }
         setText(el, finalText);
+        lastSuggestInput = getText(el).trim(); // don't auto-suggest on text we just enhanced
         resetToolbarBtns();
         trackUsage(type || "enhance");
         schedulePositionToolbar(el);
       },
       (errMsg) => {
-        if (errMsg === "refusal") {
-          setText(el, text); // restore original
+        // Restore the original on every failure — a dropped stream can leave a
+        // half-written answer in the field otherwise.
+        if (getText(el).trim() !== text) setText(el, text);
+        if (errMsg === "refusal" || errMsg === "empty") {
           resetToolbarBtns();
           return;
         }
@@ -2017,6 +2038,41 @@
     if (e.key === "Tab" && suggest && suggest.style.display !== "none" && suggestText) {
       e.preventDefault();
       applySuggestion();
+    }
+    // Hold Cmd/Win (no other key) for ~400ms — trigger Smart Enhance.
+    // A bare tap is ignored; only a sustained hold fires it. Pressing any other
+    // key while Cmd is down (Cmd+C, Cmd+Tab, etc.) cancels the hold immediately,
+    // so real Cmd-combos are never hijacked.
+    if (e.key === "Meta") {
+      if (!altHeld) {
+        altHeld = true;
+        altHoldCancelled = false;
+        clearTimeout(altHoldTimer);
+        altHoldTimer = setTimeout(() => {
+          if (altHeld && !altHoldCancelled) {
+            const el = focused || lastFocused || (isEditable(document.activeElement) ? editableRoot(document.activeElement) : null);
+            if (el && getText(el).trim()) runAction("enhance");
+          }
+        }, 400);
+      }
+    } else if (altHeld) {
+      altHoldCancelled = true;
+      clearTimeout(altHoldTimer);
+    }
+  });
+
+  // Safety net: Cmd+Tab/Cmd+Space switch away before a keyup ever reaches the page
+  // on macOS, which would otherwise leave altHeld stuck true. Blur always fires.
+  window.addEventListener("blur", () => {
+    altHeld = false;
+    altHoldCancelled = false;
+    clearTimeout(altHoldTimer);
+  });
+
+  document.addEventListener("keyup", (e) => {
+    if (e.key === "Meta") {
+      altHeld = false;
+      clearTimeout(altHoldTimer);
     }
   });
 
